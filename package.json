@@ -13,6 +13,7 @@
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "test:integration": "npm run test:integration --workspace=@smetko/web",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
     "db:generate": "npm run generate --workspace=@smetko/db",
     "db:migrate": "npm run migrate --workspace=@smetko/db",

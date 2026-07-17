@@ -1,0 +1,26 @@
+ 05.02.2026
+Prethodna sostojba / dolzi / pobaruva / nova sostojba
+100.000,00900,0020.000,00119.100,0011
+reden broj / opis
+1
+PRIMATEL EDEN DOO
+NLB Banka900,00220
+MBDP:4821:XXXXXX Dublin           FACEBK
+*RD01ADSXX1
+87BXS22223333
+210-0466453101-19
+10012500
+2
+PRIMATEL DVA DOO
+Komercijalna Banka20.000,00220
+plakjanje po smetka
+290-1111111111-11
+1-70/2026
+Vkupno denari900,0020.000,00
+Broj na izvod146
+ZA PROMENI NA SOSTOJBATA
+210-0768360001-38
+Naziv na imatel
+Danochen4032023558371
+Vkupno za smetkata210-0768360001-38ima2nalozi
+Stranica1 / 1

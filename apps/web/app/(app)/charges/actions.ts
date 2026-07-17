@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { ChargeKind, ChargeStatus, prisma } from "@smetko/db";
 import { currentPeriod, isValidPeriod } from "@smetko/shared";
-import { currentUser } from "@/lib/auth";
+import { requireWriter } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
 import { assertPeriodOpen } from "@/lib/period-guard";
 import { approveInvoice, generateCharges } from "@/lib/workflows/w1";
@@ -15,8 +15,9 @@ export type ApproveResult = { ok: true; invoiceNumber: string } | { ok: false; e
 export type SimpleResult = { ok: true } | { ok: false; error: string };
 
 export async function runW1(period: string): Promise<W1Result> {
-  const user = await currentUser();
-  if (!user) return { ok: false, error: "Не сте најавени." };
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  const user = auth.user;
   if (!isValidPeriod(period)) return { ok: false, error: "Невалиден период." };
   try {
     const { created, skipped } = await generateCharges(period, user.id);
@@ -28,8 +29,9 @@ export async function runW1(period: string): Promise<W1Result> {
 }
 
 export async function approveCharge(chargeId: string): Promise<ApproveResult> {
-  const user = await currentUser();
-  if (!user) return { ok: false, error: "Не сте најавени." };
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  const user = auth.user;
   try {
     const { invoiceNumber } = await approveInvoice(chargeId, user.id);
     revalidatePath("/charges");
@@ -63,8 +65,9 @@ export async function creditNote(
   amount: number,
   reason: string,
 ): Promise<SimpleResult> {
-  const user = await currentUser();
-  if (!user) return { ok: false, error: "Не сте најавени." };
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  const user = auth.user;
   if (!Number.isInteger(amount) || amount <= 0) return { ok: false, error: "Невалиден износ." };
 
   const period = currentPeriod();
@@ -121,9 +124,9 @@ export async function creditNote(
 export async function closePeriodAction(
   period: string,
 ): Promise<CloseResult | { ok: false; blockers: []; error: string }> {
-  const user = await currentUser();
-  if (!user) return { ok: false, blockers: [], error: "Не сте најавени." };
-  const res = await closePeriod(period, user.id);
+  const auth = await requireWriter();
+  if (!auth.ok) return { ok: false, blockers: [], error: auth.error };
+  const res = await closePeriod(period, auth.user.id);
   revalidatePath("/charges");
   return res;
 }

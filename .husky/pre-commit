@@ -1,1 +1,8 @@
+# Secret scan (SM-2, CLAUDE.md Category 3) — block commits containing detected secrets.
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --redact --no-banner
+else
+  echo "⚠ gitleaks not installed — secret scan skipped. Install: https://github.com/gitleaks/gitleaks"
+fi
+
 npx lint-staged

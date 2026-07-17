@@ -28,19 +28,12 @@ cron.schedule("0 6 1 * *", () => void trigger("w1"), { timezone: TZ });
 // W4 — Dunning: daily 06:30 (mark overdue; email reminders once Gmail is wired, SM-30).
 cron.schedule("30 6 * * *", () => void trigger("dunning"), { timezone: TZ });
 
-// W7 — Курс: daily 07:00 (НБРМ USD mid) — pending NBRM_RATE_URL (SM-37).
-cron.schedule(
-  "0 7 * * *",
-  () => {
-    log.info({ event: "cron.w7.rate.tick" }, "W7 exchange rate — pending NBRM_RATE_URL (SM-37)");
-  },
-  { timezone: TZ },
-);
+// W7 — Курс: daily 07:00 (НБРМ USD mid). Triggers the guarded app endpoint (SM-37).
+cron.schedule("0 7 * * *", () => void trigger("w7"), { timezone: TZ });
 
-// Gmail ingestion poll (Master Plan §4.1) — pending GMAIL_* OAuth (SM-30).
+// Gmail ingestion poll (Master Plan §4.1, SM-30). Triggers the guarded app endpoint, which
+// no-ops until GMAIL_* OAuth secrets are configured at go-live.
 const pollMinutes = Number(process.env.GMAIL_POLL_MINUTES ?? "12");
-cron.schedule(`*/${pollMinutes} * * * *`, () => {
-  log.info({ event: "gmail.poll.tick" }, "Gmail ingestion — pending OAuth creds (SM-30)");
-});
+cron.schedule(`*/${pollMinutes} * * * *`, () => void trigger("gmail"), { timezone: TZ });
 
 log.info({ tz: TZ, appUrl: APP_URL }, "Finance OS worker started — cron schedules registered");

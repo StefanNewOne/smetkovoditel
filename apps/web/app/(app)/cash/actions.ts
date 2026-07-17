@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@smetko/db";
 import { type CollectCashInput, currentPeriod, zCollectCash } from "@smetko/shared";
-import { currentUser } from "@/lib/auth";
+import { requireWriter } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
 import { collectCash } from "@/lib/workflows/w3";
 
@@ -11,8 +11,9 @@ export type CashResult = { ok: true } | { ok: false; error: string };
 
 /** W3 — collect a cash payment against an open charge. */
 export async function collectCashAction(input: CollectCashInput): Promise<CashResult> {
-  const user = await currentUser();
-  if (!user) return { ok: false, error: "Не сте најавени." };
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  const user = auth.user;
 
   const parsed = zCollectCash.safeParse(input);
   if (!parsed.success) {
@@ -34,8 +35,9 @@ export async function collectCashAction(input: CollectCashInput): Promise<CashRe
  * the audit trail; discrepancies are investigated, not auto-adjusted.
  */
 export async function stocktakeAction(countedDeni: number): Promise<CashResult> {
-  const user = await currentUser();
-  if (!user) return { ok: false, error: "Не сте најавени." };
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  const user = auth.user;
   if (!Number.isInteger(countedDeni) || countedDeni < 0) {
     return { ok: false, error: "Невалиден износ." };
   }

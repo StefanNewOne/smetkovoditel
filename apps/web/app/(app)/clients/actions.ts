@@ -8,15 +8,16 @@ import {
   zChangePackage,
   zCreateClient,
 } from "@smetko/shared";
-import { currentUser } from "@/lib/auth";
+import { requireWriter } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
 
 export type ActionResult = { ok: true; id: string } | { ok: false; error: string };
 
 /** Create a client + its first (versioned) package + optional Meta/Actors extras (SM-10). */
 export async function createClient(input: CreateClientInput): Promise<ActionResult> {
-  const user = await currentUser();
-  if (!user) return { ok: false, error: "Не сте најавени." };
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  const user = auth.user;
 
   const parsed = zCreateClient.safeParse(input);
   if (!parsed.success) {
@@ -91,8 +92,9 @@ export async function createClient(input: CreateClientInput): Promise<ActionResu
 
 /** Change a client's monthly package = close the current version and open a new one (B4). */
 export async function changePackage(input: ChangePackageInput): Promise<ActionResult> {
-  const user = await currentUser();
-  if (!user) return { ok: false, error: "Не сте најавени." };
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  const user = auth.user;
 
   const parsed = zChangePackage.safeParse(input);
   if (!parsed.success) {

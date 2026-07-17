@@ -67,3 +67,25 @@ Legend — **Type:** Feature / Modification / Bug / Anomaly / Maintenance / Test
 | SM-70 | Feature | Reports (P&L, margin per client, aging, cash flow)         | §9.7            | ☑      |
 | SM-71 | Feature | W9 accountant ZIP package (6 sections, xlsx exports)       | W9              | ☑      |
 | SM-72 | Testing | End-to-end verification + margin cross-check for 3 clients | §10 Ф4          | ☑      |
+
+## Progress — 2026-07-17 (completion & full test coverage)
+
+Per `completion-and-testing.md`. All work packages landed; the suite is green from a clean
+checkout (`docker compose up -d db` → unit + integration + E2E).
+
+| ID    | Change                                                                                                                                   | Status |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| SM-20 | Vitest + Docker-Postgres integration harness; T9/T10/T11/T12/T13/T14 + B1/B3/B5/B8/B12/B15/B16/B18 codified                              | ☑      |
+| SM-38 | Redacted committed golden fixtures (146/149 + 3 Meta) + golden test; W2 matching (T7) + integrity (B14) + dedupe (B13) integration       | ☑      |
+| SM-37 | W7 НБРМ USD mid cron: parser, upsert, fallback+staleness, guarded endpoint, worker wired                                                 | ☑      |
+| SM-30 | Gmail ingestion pipeline (routing/dedupe/labelling) + REST adapter + endpoint + worker. Live OAuth deferred to go-live                   | ◐      |
+| SM-50 | Tiered reminders (due+7/+21/+30), dedup via `reminder.sent`, Gmail sender, dunning endpoint                                              | ☑      |
+| SM-5  | RBAC guards (typed 401/403) wired into all 8 mutating action files; AuditLog trail verified                                              | ☑      |
+| SM-2  | `gitleaks` pre-commit hook                                                                                                               | ☑      |
+| SM-3  | web + worker Dockerfiles (multi-stage, non-root)                                                                                         | ☑      |
+| SM-7  | `docker-compose.prod.yml`, full `deploy.sh` (backup→migrate→health→rollback), Nginx/Certbot + staging/production runbooks, `/api/health` | ☑      |
+| —     | Playwright E2E (login → dashboard) against a seeded `smetko_e2e` DB                                                                      | ☑      |
+
+**Test totals:** 27 unit + 60 integration + 2 E2E = **89 green**. Lint/typecheck/build pass.
+**Remaining for go-live (needs secrets/VPS, not code):** connect Gmail OAuth (SM-30 live step),
+fill `<vps-ip>`/`<url>` placeholders, install `gitleaks` binary on dev machines.

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { currentUser } from "@/lib/auth";
+import { requireWriter } from "@/lib/rbac";
 import { detectDocType, extractPdfText } from "@/lib/pdf/extract";
 import { saveAttachment } from "@/lib/storage";
 import { ingestReceipt, ingestStatement } from "@/lib/workflows/w2";
@@ -10,8 +10,9 @@ export type UploadResult = { ok: true; summary: string[] } | { ok: false; error:
 
 /** Manual multi-upload of NLB statements / Meta receipts (D4 fallback for Gmail ingestion). */
 export async function uploadAction(formData: FormData): Promise<UploadResult> {
-  const user = await currentUser();
-  if (!user) return { ok: false, error: "Не сте најавени." };
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  const user = auth.user;
 
   const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
   if (files.length === 0) return { ok: false, error: "Нема избрани фајлови." };

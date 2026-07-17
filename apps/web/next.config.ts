@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Lean production image: emit .next/standalone (server + traced deps) for the Docker runtime.
+  output: "standalone",
   // Workspace packages are shipped as TypeScript source — let Next transpile them.
   transpilePackages: ["@smetko/db", "@smetko/shared"],
   // @react-pdf/renderer must stay a Node external (fonts, yoga wasm) — do not bundle it.

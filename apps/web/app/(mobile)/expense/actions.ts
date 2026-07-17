@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { zCashExpense } from "@smetko/shared";
-import { currentUser } from "@/lib/auth";
+import { requireWriter } from "@/lib/rbac";
 import { saveAttachment } from "@/lib/storage";
 import { recordCashExpense } from "@/lib/workflows/w6";
 
@@ -10,8 +10,9 @@ export type Result = { ok: true } | { ok: false; error: string };
 
 /** W6 — record a cash expense from the mobile form. Photo is mandatory (B5). */
 export async function recordCashExpenseAction(formData: FormData): Promise<Result> {
-  const user = await currentUser();
-  if (!user) return { ok: false, error: "Не сте најавени." };
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  const user = auth.user;
 
   const photo = formData.get("photo");
   if (!(photo instanceof File) || photo.size === 0) {

@@ -15,6 +15,9 @@ export const DENI_PER_DENAR = 100;
 /** Macedonian standard VAT (ДДВ). Never hardcode 0.18 elsewhere — reference this. (B11) */
 export const VAT_RATE = 0.18;
 
+/** Personal-income withholding on honorari (данок на личен доход) — WITHHOLD_10 mode. */
+export const WITHHOLDING_RATE = 0.1;
+
 /** Assert-construct a Deni from an already-integer value. Throws on non-integers. */
 export function deni(value: number): Deni {
   if (!Number.isInteger(value)) {
@@ -65,4 +68,9 @@ export function vatOf(base: Deni, rate: number = VAT_RATE): Deni {
 /** base + VAT, in дени. */
 export function withVat(base: Deni, rate: number = VAT_RATE): Deni {
   return base + vatOf(base, rate);
+}
+
+/** Withholding tax on an honorar gross, by tax mode (B8). WITHHOLD_10 → 10%, else 0. */
+export function withholdingTax(gross: Deni, taxMode: string): Deni {
+  return taxMode === "WITHHOLD_10" ? Math.round(gross * WITHHOLDING_RATE) : 0;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMKD, parseDenari, vatOf, withVat } from "./money";
+import { formatMKD, parseDenari, vatOf, withVat, withholdingTax } from "./money";
 
 describe("money (integer дени)", () => {
   it("parses де-DE денари strings to дени", () => {
@@ -23,5 +23,14 @@ describe("money (integer дени)", () => {
 
   it("round-trips parse → format", () => {
     expect(formatMKD(parseDenari("1.284.400,00"))).toBe("1.284.400,00");
+  });
+
+  it("withholding tax (T13: 30.000 gross, WITHHOLD_10 → 3.000 tax → 27.000 net)", () => {
+    const gross = 3000000; // 30.000 денари
+    expect(withholdingTax(gross, "WITHHOLD_10")).toBe(300000); // 3.000
+    expect(gross - withholdingTax(gross, "WITHHOLD_10")).toBe(2700000); // 27.000 net
+    expect(withholdingTax(gross, "NO_WITHHOLDING")).toBe(0); // B8
+    // T13 allocation: Astibo 60% billable → 18.000 денари ACTORS expense
+    expect(Math.round(gross * 0.6)).toBe(1800000);
   });
 });

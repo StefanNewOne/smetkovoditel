@@ -44,6 +44,54 @@ export const zCollectCash = z.object({
 });
 export type CollectCashInput = z.infer<typeof zCollectCash>;
 
+// ── Contractors / honorari (W5) ──────────────────────────────────────────────
+export const zContractType = z.enum(["DOGOVOR_NA_DELO", "CONTRACTOR_INVOICE"]);
+export const zTaxMode = z.enum(["WITHHOLD_10", "NO_WITHHOLDING"]);
+export const zPayoutChannel = z.enum(["CASH", "BANK"]);
+
+/** Register a contractor. B8: NO_WITHHOLDING is only allowed with a CONTRACTOR_INVOICE. */
+export const zCreateContractor = z
+  .object({
+    name: z.string().trim().min(1, "Внеси име"),
+    idNumber: z.string().trim().optional(),
+    contractType: zContractType,
+    taxMode: zTaxMode,
+    isTalent: z.boolean().default(false),
+    defaultRate: z.number().int().min(0).optional(),
+  })
+  .refine((d) => d.taxMode !== "NO_WITHHOLDING" || d.contractType === "CONTRACTOR_INVOICE", {
+    message: "NO_WITHHOLDING е дозволено само со фактура од изведувач (B8).",
+    path: ["taxMode"],
+  });
+export type CreateContractorInput = z.infer<typeof zCreateContractor>;
+
+export const zAllocation = z.object({
+  clientId: z.string().min(1),
+  amount: z.number().int().positive(), // дени (bruto share)
+  billable: z.boolean(),
+});
+
+/** Calculate an honorar: gross + allocations that must sum to gross. */
+export const zCalcHonorar = z
+  .object({
+    contractorId: z.string().min(1),
+    period: z.string().regex(/^\d{4}-\d{2}$/),
+    grossAmount: z.number().int().positive(),
+    allocations: z.array(zAllocation).min(1, "Додади барем една алокација"),
+  })
+  .refine((d) => d.allocations.reduce((s, a) => s + a.amount, 0) === d.grossAmount, {
+    message: "Збирот на алокациите мора да е еднаков на бруто износот.",
+    path: ["allocations"],
+  });
+export type CalcHonorarInput = z.infer<typeof zCalcHonorar>;
+
+export const zPayout = z.object({
+  paymentId: z.string().min(1),
+  channel: zPayoutChannel,
+  documentNumber: z.string().trim().optional(), // required for CASH (B7)
+});
+export type PayoutInput = z.infer<typeof zPayout>;
+
 /** A new versioned service-package amount (B4 — never edit, always a new version). */
 export const zChangePackage = z.object({
   clientId: z.string().min(1),

@@ -131,7 +131,20 @@ export function ChargesView({
             style={{ gridTemplateColumns: COLS }}
           >
             <span className="font-bold text-ink">{c.clientName}</span>
-            <span className="text-muted">{c.invoiceNumber ?? "—"}</span>
+            <span>
+              {c.invoiceNumber ? (
+                <a
+                  href={`/charges/${c.id}/invoice`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-semibold text-accent hover:underline"
+                >
+                  {c.invoiceNumber}
+                </a>
+              ) : (
+                <span className="text-muted">—</span>
+              )}
+            </span>
             <span className="text-[11px] font-bold text-muted-2">
               {KIND_LABEL[c.kind] ?? c.kind}
             </span>

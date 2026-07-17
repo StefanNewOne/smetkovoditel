@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@react-pdf/renderer": "^4.5.1",
     "@smetko/db": "*",
     "@smetko/shared": "*",
     "bcryptjs": "^2.4.3",

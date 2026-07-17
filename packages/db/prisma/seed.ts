@@ -39,7 +39,25 @@ async function main() {
     },
   });
 
-  console.log(`Seeded: user ${email} (password: ${password}), period ${period}, NLB account.`);
+  // Starter VendorRules for CARD_TX auto-categorization (§4.2, SM-51). go-live extends these.
+  const rules: { pattern: string; category: "FUEL" | "OPERATIONS"; vendor?: string }[] = [
+    { pattern: "PETROL", category: "FUEL", vendor: "Makpetrol" },
+    { pattern: "MAKPETROL", category: "FUEL", vendor: "Makpetrol" },
+    { pattern: "LUKOIL", category: "FUEL", vendor: "Lukoil" },
+    { pattern: "K.VODA", category: "FUEL", vendor: "BP" },
+    { pattern: "OKTA", category: "FUEL" },
+  ];
+  for (const r of rules) {
+    const existing = await prisma.vendorRule.findFirst({ where: { pattern: r.pattern } });
+    if (!existing)
+      await prisma.vendorRule.create({
+        data: { pattern: r.pattern, category: r.category, vendor: r.vendor ?? null },
+      });
+  }
+
+  console.log(
+    `Seeded: user ${email} (password: ${password}), period ${period}, NLB account, ${rules.length} vendor rules.`,
+  );
 }
 
 main()

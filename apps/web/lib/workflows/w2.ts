@@ -122,6 +122,7 @@ export async function ingestStatement(
     const openCharges = await tx.charge.findMany({
       where: { kind: "INVOICE", invoiceNumber: { not: null }, status: { in: OPEN_STATUSES } },
     });
+    const vendorRules = await tx.vendorRule.findMany();
 
     for (const line of parsed.lines) {
       // reference stores the matching key per type: FACEBK code (META_ADS) or повик (CLIENT_PAYMENT)
@@ -181,6 +182,28 @@ export async function ingestStatement(
           });
           match.paidAmount = newPaid; // avoid re-matching within this statement
           clientMatched++;
+        }
+      } else if (line.classifiedAs === "CARD_TX" && line.merchant) {
+        // SM-51: auto-categorize card purchases via VendorRule (e.g. PETROL → FUEL).
+        const merchant = line.merchant.toUpperCase();
+        const rule = vendorRules.find((r) => merchant.includes(r.pattern.toUpperCase()));
+        if (rule) {
+          const exp = await tx.expense.create({
+            data: {
+              category: rule.category,
+              vendor: rule.vendor ?? line.merchant,
+              amount: line.amount,
+              date: statementDate,
+              paymentChannel: PayChannel.CARD,
+              isBillable: false,
+              statementLineId: sl.id,
+            },
+          });
+          await tx.vendorRule.update({ where: { id: rule.id }, data: { hits: { increment: 1 } } });
+          await tx.statementLine.update({
+            where: { id: sl.id },
+            data: { processed: true, linkedType: "Expense", linkedId: exp.id },
+          });
         }
       }
     }

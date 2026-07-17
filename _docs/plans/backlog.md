@@ -52,13 +52,13 @@ Legend — **Type:** Feature / Modification / Bug / Anomaly / Maintenance / Test
 
 ## Phase 3 — Ф3 Дисциплина
 
-| ID    | Type    | Title                                                        | Master Plan ref | Status |
-| ----- | ------- | ------------------------------------------------------------ | --------------- | ------ |
-| SM-50 | Feature | W4 dunning (invoice reminders + OVERDUE; cash internal note) | W4              | ☐      |
-| SM-51 | Feature | VendorRules management + CARD_TX auto-categorization         | §4.2            | ☐      |
-| SM-52 | Feature | Payroll (Employee + PayrollRun)                              | W5              | ☐      |
-| SM-53 | Feature | CREDIT_NOTE / storno corrections                             | §3, B9          | ☑      |
-| SM-54 | Feature | W8 month close (blockers → CLOSED → immutable B9)            | W8, B9          | ☑      |
+| ID    | Type    | Title                                                                      | Master Plan ref | Status |
+| ----- | ------- | -------------------------------------------------------------------------- | --------------- | ------ |
+| SM-50 | Feature | W4 OVERDUE marking (done+verified) + cron; email reminders → SM-30 (Gmail) | W4              | ◐      |
+| SM-51 | Feature | VendorRules management + CARD_TX auto-categorization                       | §4.2            | ☑      |
+| SM-52 | Feature | Payroll (Employee + PayrollRun)                                            | W5              | ☐      |
+| SM-53 | Feature | CREDIT_NOTE / storno corrections                                           | §3, B9          | ☑      |
+| SM-54 | Feature | W8 month close (blockers → CLOSED → immutable B9)                          | W8, B9          | ☑      |
 
 ## Phase 4 — Ф4 Извештаи
 

@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'Manrope',sans-serif;background:#f6f8fb;color:#1a2333;-webkit-font-smoothing:antialiased}
+a{color:#3b76d1;text-decoration:none} a:hover{color:#2a5cab}
+*{box-sizing:border-box}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:#d6dde8;border-radius:6px}
+</style>
+</helmet>
+<div style="height:100vh; overflow:auto"><div style="display:flex; height:100vh; min-width:1180px; overflow:hidden">
+  <!-- SIDEBAR -->
+  <div style="width:236px; flex-shrink:0; background:#ffffff; border-right:1px solid #e7ecf3; display:flex; flex-direction:column; padding:20px 14px">
+    <div style="display:flex; align-items:center; gap:8px; padding:4px 10px 22px 10px">
+      <div style="background:{{ accent }}; color:#fff; font-weight:800; font-size:15px; letter-spacing:0.5px; padding:4px 8px; border-radius:6px">GO</div>
+      <div style="font-weight:800; font-size:15px; letter-spacing:2px; color:{{ accent }}">DIGITAL</div>
+      <div style="margin-left:auto; font-size:10px; font-weight:700; color:#8a97ab; background:#f0f4f9; border-radius:5px; padding:2px 6px">OS</div>
+    </div>
+    <sc-for list="{{ nav }}" as="item" hint-placeholder-count="8">
+      <div onClick="{{ item.go }}" style="display:flex; align-items:center; gap:11px; padding:10px 12px; border-radius:9px; cursor:pointer; margin-bottom:2px; background:{{ item.bg }}; color:{{ item.color }}; font-weight:{{ item.weight }}; font-size:13.5px" style-hover="background:#f0f4f9">
+        <span style="width:18px; text-align:center; font-size:15px">{{ item.icon }}</span>
+        <span>{{ item.label }}</span>
+        <sc-if value="{{ item.badge }}" hint-placeholder-val="{{ false }}">
+          <span style="margin-left:auto; background:#fdecec; color:#c2483f; font-size:11px; font-weight:700; border-radius:10px; padding:1px 8px">{{ item.badge }}</span>
+        </sc-if>
+      </div>
+    </sc-for>
+    <div style="margin-top:auto; border-top:1px solid #eef2f7; padding:14px 10px 2px 10px">
+      <div style="font-size:12px; font-weight:700">АЛМА ДИЗАЈН ДООЕЛ</div>
+      <div style="font-size:11px; color:#8a97ab; margin-top:2px">Александар Кекиќ · Admin</div>
+      <div style="font-size:11px; color:#8a97ab; margin-top:6px; display:flex; align-items:center; gap:6px"><span style="width:7px; height:7px; border-radius:50%; background:#4caf7d; display:inline-block"></span>Период 2026-07 · ОТВОРЕН</div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div style="flex:1; display:flex; flex-direction:column; overflow:hidden">
+    <div style="height:60px; flex-shrink:0; background:#fff; border-bottom:1px solid #e7ecf3; display:flex; align-items:center; padding:0 28px; gap:14px">
+      <div style="font-size:16px; font-weight:800">{{ screenTitle }}</div>
+      <div style="margin-left:auto; display:flex; align-items:center; gap:12px">
+        <div style="font-size:12px; color:#8a97ab; background:#f0f4f9; border-radius:8px; padding:6px 12px">Gmail sync · пред 4 мин</div>
+        <div onClick="{{ goMobile }}" style="font-size:12px; font-weight:700; color:{{ accent }}; border:1px solid #d3e0f4; border-radius:8px; padding:6px 12px; cursor:pointer" style-hover="background:#eef4fd"><span style="white-space:nowrap">📱 Преглед: мобилен PWA внес (W6)</span></div>
+      </div>
+    </div>
+
+    <div style="flex:1; overflow-y:auto; padding:28px; animation:fadeUp .25s ease">
+
+    <!-- ============ DASHBOARD ============ -->
+    <sc-if value="{{ isDashboard }}" hint-placeholder-val="{{ true }}">
+      <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:16px">
+        <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="4">
+          <div style="background:#fff; border:1px solid #e7ecf3; border-radius:14px; padding:20px 22px">
+            <div style="font-size:12px; font-weight:600; color:#8a97ab">{{ k.label }}</div>
+            <div style="font-size:26px; font-weight:800; margin-top:6px; color:{{ k.color }}">{{ k.value }}</div>
+            <div style="font-size:12px; color:#8a97ab; margin-top:4px">{{ k.sub }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:grid; grid-template-columns:1.4fr 1fr; gap:16px; margin-top:16px">
+        <div style="background:#fff; border:1px solid #e7ecf3; border-radius:14px; padding:22px">
+          <div style="font-size:14px; font-weight:800; margin-bottom:16px">Задолжено vs наплатено — јули 2026</div>
+          <sc-for list="{{ chargeBars }}" as="b" hint-placeholder-count="2">
+            <div style="margin-bottom:18px">
+              <div style="display:flex; justify-content:space-between; gap:12px; font-size:12.5px; margin-bottom:6px">
+                <span style="font-weight:700; white-space:nowrap">{{ b.label }}</span>
+                <span style="color:#8a97ab; white-space:nowrap">{{ b.text }}</span>
+              </div>
+              <div style="height:12px; background:#eef2f7; border-radius:6px; overflow:hidden">
+                <div style="height:100%; border-radius:6px; background:{{ b.color }}; width:{{ b.pct }}"></div>
+              </div>
+            </div>
+          </sc-for>
+          <div style="display:flex; gap:24px; margin-top:20px; padding-top:16px; border-top:1px solid #eef2f7">
+            <div><div style="font-size:11px; color:#8a97ab">Фактури издадени</div><div style="font-size:18px; font-weight:800">26 / 28</div></div>
+            <div><div style="font-size:11px; color:#8a97ab">Кеш обврски</div><div style="font-size:18px; font-weight:800">17</div></div>
+            <div><div style="font-size:11px; color:#8a97ab">OVERDUE</div><div style="font-size:18px; font-weight:800; color:#c2483f">4</div></div>
+          </div>
+        </div>
+        <div style="background:#fff; border:1px solid #e7ecf3; border-radius:14px; padding:22px">
+          <div style="font-size:14px; font-weight:800; margin-bottom:14px">Топ должници</div>
+          <sc-for list="{{ debtors }}" as="d" hint-placeholder-count="5">
+            <div style="display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid #f2f5f9">
+              <div style="width:30px; height:30px; border-radius:8px; background:#eef4fd; color:{{ accent }}; font-weight:800; font-size:12px; display:flex; align-items:center; justify-content:center">{{ d.init }}</div>
+              <div style="flex:1"><div style="font-size:13px; font-weight:700">{{ d.name }}</div><div style="font-size:11px; color:#8a97ab">{{ d.age }}</div></div>
+              <div style="font-size:13px; font-weight:800; color:#c2483f">{{ d.amt }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="background:#fff; border:1px solid #e7ecf3; border-radius:14px; padding:22px; margin-top:16px">
+        <div style="font-size:14px; font-weight:800; margin-bottom:14px">Редици за внимание</div>
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px">
+          <sc-for list="{{ queues }}" as="q" hint-placeholder-count="4">
+            <div onClick="{{ q.go }}" style="border:1px solid #e7ecf3; border-radius:11px; padding:14px 16px; cursor:pointer" style-hover="border-color:#b9cff0; background:#fbfcfe">
+              <div style="display:flex; align-items:center; justify-content:space-between"><span style="font-size:20px; font-weight:800; color:{{ q.color }}">{{ q.count }}</span><span style="font-size:15px">{{ q.icon }}</span></div>
+              <div style="font-size:12px; font-weight:600; color:#5b6878; margin-top:6px">{{ q.label }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ КЛИЕНТИ ============ -->
+    <sc-if value="{{ isClientsList }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:18px">
+        <sc-for list="{{ clientFilters }}" as="f" hint-placeholder-count="3">
+          <div onClick="{{ f.go }}" style="font-size:12.5px; font-weight:700; padding:7px 14px; border-radius:20px; cursor:pointer; background:{{ f.bg }}; color:{{ f.color }}; border:1px solid {{ f.border }}">{{ f.label }}</div>
+        </sc-for>
+        <div onClick="{{ openWizard }}" style="margin-left:auto; background:{{ accent }}; color:#fff; font-size:13px; font-weight:700; padding:9px 18px; border-radius:9px; cursor:pointer; white-space:nowrap" style-hover="opacity:0.9">+ Нов клиент</div>
+      </div>
+      <div style="background:#fff; border:1px solid #e7ecf3; border-radius:14px; overflow:hidden">
+        <div style="display:grid; grid-template-columns:2fr 1fr 1fr 1fr 1fr 0.8fr; gap:8px; padding:12px 22px; font-size:11px; font-weight:700; color:#8a97ab; text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid #eef2f7; white-space:nowrap">
+          <div>Клиент</div><div>Канал</div><div>Месечен пакет</div><div>Отворено</div><div>Дополнителни</div><div>Статус</div>
+        </div>
+        <sc-for list="{{ clients }}" as="c" hint-placeholder-count="8">
+          <div onClick="{{ c.open }}" style="display:grid; grid-template-columns:2fr 1fr 1fr 1fr 1fr 0.8fr; gap:8px; padding:14px 22px; font-size:13px; border-bottom:1px solid #f2f5f9; cursor:pointer; align-items:center" style-hover="background:#fbfcfe">
+            <div style="font-weight:700">{{ c.name }}</div>
+            <div><span style="font-size:11px; font-weight:700; padding:3px 10px; border-radius:12px; background:{{ c.chBg }}; color:{{ c.chColor }}">{{ c.channel }}</span></div>
+            <div style="font-weight:600">{{ c.pkg }}</div>
+            <div style="color:{{ c.openColor }}; font-weight:700">{{ c.openAmt }}</div>
+            <div style="font-size:12px; color:#8a97ab">{{ c.extras }}</div>
+            <div style="font-size:12px; color:#4caf7d; font-weight:700">{{ c.status }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <!-- ============ ПРОФИЛ НА КЛИЕНТ ============ -->
+    <sc-if value="{{ isClientProfile }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ backToClients }}" style="font-size:12.5px; font-weight:700; color:{{ accent }}; cursor:pointer; margin-bottom:14px">← Назад кон клиенти</div>
+      <div style="display:grid; grid-template-columns:1fr 320px; gap:16px">
+        <div>
+          <div style="background:#fff; border:1px solid #e7ecf3; border-radius:14px; padding:24px">
+            <div style="display:flex; align-items:center; gap:14px">
+              <div style="width:48px; height:48px; border-radius:12px; background:#eef4fd; color:{{ accent }}; font-weight:800; font-size:17px; display:flex; align-items:center; justify-content:center">{{ profile.init }}</div>
+              <div><div style="font-size:19px; font-weight:800">{{ profile.name }}</div><div style="font-size:12.5px; color:#8a97ab">{{ profile.meta }}</div></div>
+              <span style="margin-left:auto; font-size:11px; font-weight:700; padding:4px 12px; border-radius:12px; background:{{ profile.chBg }}; color:{{ profile.chColor }}">{{ profile.channel }}</span>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:20px">
+              <div style="background:#f8fafc; border-radius:10px; padding:12px 14px"><div style="font-size:11px; color:#8a97ab">Пакет</div><div style="font-size:15px; font-weight:800">{{ profile.pkg }}</div></div>
+              <div style="background:#f8fafc; border-radius:10px; padding:12px 14px"><div style="font-size:11px; color:#8a97ab">Отворено</div><div style="font-size:15px; font-weight:800; color:#c2483f">{{ profile.openAmt }}</div></div>
+              <div style="background:#f8fafc; border-radius:10px; padding:12px 14px"><div style="font-size:11px; color:#8a97ab">Маргина YTD</div><div style="font-size:15px; font-weight:800; color:#4caf7d">{{ profile.margin }}</div></div>
+              <div style="background:#f8fafc; border-radius:10px; padding:12px 14px"><div style="font-size:11px; color:#8a97ab">Преплата</div><div style="font-size:15px; font-weight:800">{{ profile.credit }}</div></div>
+            </div>
+          </div>
+          <div style="background:#fff; border:1px solid #e7ecf3; border-radius:14px; padding:24px; margin-top:16px">
+            <div style="font-size:14px; font-weight:800; margin-bottom:14px">Задолжувања — 2026</div>
+            <sc-for list="{{ profile.charges }}" as="ch" hint-placeholder-count="4">
+              <div style="display:flex; align-items:center; gap:12px; padding:11px 0; border-bottom:1px solid #f2f5f9; font-size:13px">
+                <div style="width:74px; color:#8a97ab; font-weight:600">{{ ch.period }}</div>
+                <div style="flex:1; font-weight:700">{{ ch.no }}</div>
+                <div style="font-weight:700">{{ ch.amt }}</div>
+                <span style="font-size:11px; font-weight:700; padding:3px 10px; border-radius:12px; background:{{ ch.bg }}; color:{{ ch.color }}">{{ ch.label }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div>
+          <div style="background:#fff; border:1px solid #e7ecf3; border-radius:14px; padding:22px">
+            <div style="font-size:13px; font-weight:800; margin-bottom:12px">Пакет-историја (верзионирано)</div>
+            <sc-for list="{{ profile.versions }}" as="v" hint-placeholder-count="2">
+              <div style="display:flex; gap:10px; padding:8px 0">
+                <div style="width:8px; height:8px; border-radius:50%; background:{{ v.dot }}; margin-top:5px; flex-shrink:0"></div>
+                <div><div style="font-size:13px; font-weight:700">{{ v.amt }}</div><div style="font-size:11.5px; color:#8a97ab">{{ v.range }}</div></div>
+              </div>
+            </sc-for>
+            <div style="font-size:11px; color:#8a97ab; background:#f8fafc; border-radius:8px; padding:8px 10px; margin-top:8px">B4: промена = нова верзија, edit не постои</div>
+          </div>
+          <div style="background:#fff; border:1px solid #e7ecf3; border-radius:14px; padding:22px; margin-top:16px">
+            <div style="font-size:13px; font-weight:800; margin-bottom:12px">Дополнителни ставки</div>
+            <sc-for list="{{ profile.extras }}" as="e" hint-placeholder-count="2">
+              <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #f2f5f9">
+                <div><div style="font-size:12.5px; font-weight:700">{{ e.label }}</div><div style="font-size:11px; color:#8a97ab">{{ e.mode }}</div></div>
+                <div style="font-size:12.5px; font-weight:700">{{ e.amt }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ ЗАДОЛЖУВАЊА ============ -->
+    <sc-if value="{{ isCharges }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:18px">
+        <div onClick="{{ toastMonth }}" style="font-size:13px; font-weight:700; background:#fff; border:1px solid #e7ecf3; border-radius:9px; padding:8px 16px; cursor:pointer" style-hover="background:#f8fafc">‹ Јули 2026 ›</div>
+        <div style="font-size:12px; color:#8a97ab">W1 извршен 01.07 06:00 · 45 задолжувања генерирани</div>
+        <div style="margin-left:auto; display:flex; gap:8px">
+          <div onClick="{{ toastCreditNote }}" style="font-size:12px; font-weight:700; color:#5b6878; border:1px solid #e7ecf3; background:#fff; border-radius:8px; padding:8px 14px; cursor:pointer" style-hover="background:#f8fafc">Книжно одобрение</div>
+          <div onClick="{{ approveAll }}" style="font-size:12px; font-weight:700; color:#fff; background:{{ accent }}; border-radius:8px; padding:8px 14px; cursor:pointer" style-hover="opacity:0.9">Одобри ги сите DRAFT</div>
+        </div>
+      </div>
+      <div style="background:#fff; border:1px solid #e7ecf3; border-radius:14px; overflow:hidden">
+        <div style="display:grid; grid-template-columns:1.8fr 1.1fr 0.9fr 1fr 1fr 1fr 1.3fr; padding:12px 22px; font-size:11px; font-weight:700; color:#8a97ab; text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid #eef2f7">
+          <div>Клиент</div><div>Број</div><div>Вид</div><div>Основица</div><div>ДДВ 18%</div><div>Вкупно</div><div style="text-align:right">Статус / Акција</div>
+        </div>
+        <sc-for list="{{ charges }}" as="ch" hint-placeholder-count="7">
+          <div style="display:grid; grid-template-columns:1.8fr 1.1fr 0.9fr 1fr 1fr 1fr 1.3fr; padding:13px 22px; font-size:13px; border-bottom:1px solid #f2f5f9; align-items:center">
+            <div style="font-weight:700">{{ ch.client }}</div>
+            <div onClick="{{ ch.preview }}" style="color:{{ ch.noColor }}; font-weight:600; cursor:{{ ch.noCursor }}">{{ ch.no }}</div>
+            <div style="font-size:11.5px; color:#8a97ab; font-weight:600">{{ ch.kind }}</div>
+            <div>{{ ch.subtotal }}</div>
+            <div style="color:#8a97ab">{{ ch.vat }}</div>
+            <div style="font-weight:800">{{ ch.total }}</div>
+            <div style="display:flex; justify-content:flex-end; gap:8px; align-items:center">
+              <span style="font-size:11px; font-weight:700; padding:3px 10px; border-radius:12px; background:{{ ch.bg }}; color:{{ ch.color }}">{{ ch.label }}</span>
+              <sc-if value="{{ ch.canApprove }}" hint-placeholder-val="{{ false }}">
+                <div onClick="{{ ch.approve }}" style="font-size:11px; font-weight:700; color:{{ accent }}; border:1px solid #d3e0f4; border-radius:7px; padding:4px 10px; cursor:pointer" style-hover="background:#eef4fd">Одобри</div>
+              </sc-if>
+              <sc-if value="{{ ch.canPdf }}" hint-placeholder-val="{{ false }}">
+                <div onClick="{{ ch.preview }}" style="font-size:11px; font-weight:700; color:#5b6878; border:1px solid #e7ecf3; border-radius:7px; padding:4px 10px; cursor:pointer" style-hover="background:#f8fafc">PDF</div>
+              </sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:12px; color:#8a97ab; margin-top:12px">B1: бројот 1-{n}/7-2026 се доделува при DRAFT→OPEN — без дупки. B12: еден Charge по клиент/период/вид.</div>
+    </sc-if>
+
+    <!-- ============ IMPORT ЦЕНТАР ============ -->
+    <sc-if value="{{ isImport }}" hint-placeholder-val="{{ false }}">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px">
+        <div style="background:#fff; border:1px solid #e7ecf3; border-radius:14px; padding:22px">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px">
+            <div style="font-size:14px; font-weight:800">НЛБ изводи</div>
+            <div onClick="{{ toastUpload }}" style="font-size:12px; font-weight:700; color:{{ accent }}; border:1px dashed #b9cff0; border-radius:8px; padding:6px 12px; cursor:pointer" style-hover="background:#eef4fd">⇧ Multi-upload PDF</div>
+          </div>
+          <sc-for list="{{ statements }}" as="s" hint-placeholder-count="3">
+            <div style="border:1px solid #eef2f7; border-radius:11px; padding:14px 16px; margin-bottom:10px">
+              <div style="display:flex; align-items:center; gap:10px">
+                <div style="font-size:13px; font-weight:800">Извод бр. {{ s.no }}</div>
+                <div style="font-size:11.5px; color:#8a97ab">{{ s.date }} · {{ s.src }}</div>
+                <span style="margin-left:auto; font-size:11px; font-weight:700; padding:3px 10px; border-radius:12px; background:{{ s.bg }}; color:{{ s.color }}">{{ s.status }}</span>
+              </div>
+              <div style="display:flex; gap:16px; font-size:12px; color:#5b6878; margin-top:10px">
+                <span>Претходно <b>{{ s.open }}</b></span><span>Долгува <b style="color:#c2483f">{{ s.debit }}</b></span><span>Побарува <b style="color:#4caf7d">{{ s.credit }}</b></span><span>Ново <b>{{ s.close }}</b></span><span>Налози <b>{{ s.count }}</b></span>
+              </div>
+              <div style="font-size:11.5px; margin-top:8px; color:{{ s.checkColor }}">{{ s.check }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="background:#fff; border:1px solid #e7ecf3; border-radius:14px; padding:22px">
+          <div style="font-size:14px; font-weight:800; margin-bottom:14px">Редици</div>
+          <div style="display:flex; gap:6px; margin-bottom:16px; flex-wrap:wrap">
+            <sc-for list="{{ queueTabs }}" as="t" hint-placeholder-count="4">
+              <div onClick="{{ t.go }}" style="font-size:12px; font-weight:700; padding:7px 12px; border-radius:8px; cursor:pointer; background:{{ t.bg }}; color:{{ t.color }}">{{ t.label }} · {{ t.count }}</div>
+            </sc-for>
+          </div>
+          <sc-for list="{{ queueItems }}" as="qi" hint-placeholder-count="3">
+            <div style="border:1px solid #eef2f7; border-radius:11px; padding:13px 15px; margin-bottom:10px">
+              <div style="display:flex; align-items:center; gap:8px">
+                <span style="font-size:14px">{{ qi.icon }}</span>
+                <div style="font-size:13px; font-weight:700">{{ qi.title }}</div>
+                <div style="margin-left:auto; font-size:12.5px; font-weight:800">{{ qi.amt }}</div>
+              </div>
+              <div style="font-size:11.5px; color:#8a97ab; margin-top:5px">{{ qi.sub }}</div>
+              <div style="display:flex; gap:8px; margin-top:10px">
+                <div onClick="{{ qi.resolve }}" style="font-size:11px; font-weight:700; color:{{ accent }}; border:1px solid #d3e0f4; border-radius:7px; padding:4px 10px; cursor:pointer" style-hover="background:#eef4fd">{{ qi.action }}</div>
+                <div onClick="{{ toastPdf }}" style="font-size:11px; font-weight:700; color:#8a97ab; border:1px solid #e7ecf3; border-radius:7px; padding:4px 10px; cursor:pointer" style-hover="background:#f8fafc">Прегледај PDF</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ БЛАГАЈНА ============ -->
+    <sc-if value="{{ isCash }}" hint-placeholder-val="{{ false }}">
+      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:16px">
+        <div style="background:#fff; border:1px solid #e7ecf3; border-radius:14px; padding:20px 22px"><div style="font-size:12px; color:#8a97ab; font-weight:600">Салдо на благајна</div><div style="font-size:26px; font-weight:800; margin-top:6px">86.350 ден</div><div style="font-size:12px; color:#4caf7d; margin-top:4px">✓ B3: никогаш негативна</div></div>
+        <div style="background:#fff; border:1px solid #e7ecf3; border-radius:14px; padding:20px 22px"><div style="font-size:12px; color:#8a97ab; font-weight:600">Влез овој месец</div><div style="font-size:26px; font-weight:800; margin-top:6px; color:#4caf7d">+214.000</div><div style="font-size:12px; color:#8a97ab; margin-top:4px">11 кеш-наплати</div></div>
+        <div style="background:#fff; border:1px solid #e7ecf3; border-radius:14px; padding:20px 22px"><div style="font-size:12px; color:#8a97ab; font-weight:600">Излез овој месец</div><div style="font-size:26px; font-weight:800; margin-top:6px; color:#c2483f">−167.650</div><div style="font-size:12px; color:#8a97ab; margin-top:4px">хонорари + трошоци</div></div>
+      </div>
+      <div style="background:#fff; border:1px solid #e7ecf3; border-radius:14px; overflow:hidden">
+        <div style="display:flex; align-items:center; padding:16px 22px; border-bottom:1px solid #eef2f7">
+          <div style="font-size:14px; font-weight:800">Благајнички дневник</div>
+          <div style="margin-left:auto; display:flex; gap:8px">
+            <div onClick="{{ toastPopis }}" style="font-size:12px; font-weight:700; color:#5b6878; border:1px solid #e7ecf3; border-radius:8px; padding:7px 13px; cursor:pointer" style-hover="background:#f8fafc">Попис</div>
+            <div onClick="{{ goMobile }}" style="font-size:12px; font-weight:700; color:#fff; background:{{ accent }}; border-radius:8px; padding:7px 13px; cursor:pointer" style-hover="opacity:0.9">+ Кеш-трошок (мобилен)</div>
+          </div>
+        </div>
+        <sc-for list="{{ cashEntries }}" as="e" hint-placeholder-count="6">
+          <div style="display:grid; grid-template-columns:90px 1.8fr 1fr 1fr 100px 70px; padding:13px 22px; font-size:13px; border-bottom:1px solid #f2f5f9; align-items:center">
+            <div style="color:#8a97ab; font-weight:600">{{ e.date }}</div>
+            <div style="font-weight:700">{{ e.desc }}</div>
+            <div style="font-size:11.5px; color:#8a97ab">{{ e.doc }}</div>
+            <div style="font-size:11.5px; color:#8a97ab">{{ e.party }}</div>
+            <div style="font-weight:800; color:{{ e.color }}; text-align:right">{{ e.amt }}</div>
+            <div style="text-align:right; font-size:15px">{{ e.photo }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <!-- ============ ХОНОРАРЦИ ============ -->
+    <sc-if value="{{ isContractors }}" hint-placeholder-val="{{ false }}">
+      <div style="display:grid; grid-template-columns:1fr 1.3fr; gap:16px">
+        <div style="background:#fff; border:1px solid #e7ecf3; border-radius:14px; overflow:hidden">
+          <div style="display:flex; align-items:center; padding:16px 22px; border-bottom:1px solid #eef2f7"><div style="font-size:14px; font-weight:800">Регистар</div><div onClick="{{ toastNewContractor }}" style="margin-left:auto; font-size:12px; font-weight:700; color:{{ accent }}; cursor:pointer">+ Нов</div></div>
+          <sc-for list="{{ contractors }}" as="co" hint-placeholder-count="4">
+            <div onClick="{{ co.open }}" style="display:flex; align-items:center; gap:12px; padding:14px 22px; border-bottom:1px solid #f2f5f9; cursor:pointer; background:{{ co.bg }}" style-hover="background:#fbfcfe">
+              <div style="width:34px; height:34px; border-radius:9px; background:#eef4fd; color:{{ accent }}; font-weight:800; font-size:13px; display:flex; align-items:center; justify-content:center">{{ co.init }}</div>
+              <div style="flex:1"><div style="font-size:13px; font-weight:700">{{ co.name }} {{ co.talent }}</div><div style="font-size:11.5px; color:#8a97ab">{{ co.type }}</div></div>
+              <div style="font-size:12px; font-weight:700; color:#5b6878">{{ co.rate }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="background:#fff; border:1px solid #e7ecf3; border-radius:14px; padding:24px">
+          <div style="font-size:14px; font-weight:800">Пресметка — Вања С. · јули 2026</div>
+          <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:16px">
+            <div style="background:#f8fafc; border-radius:10px; padding:12px 14px"><div style="font-size:11px; color:#8a97ab">Бруто</div><div style="font-size:16px; font-weight:800">30.000</div></div>
+            <div style="background:#f8fafc; border-radius:10px; padding:12px 14px"><div style="font-size:11px; color:#8a97ab">Данок 10%</div><div style="font-size:16px; font-weight:800; color:#c2483f">3.000</div></div>
+            <div style="background:#f8fafc; border-radius:10px; padding:12px 14px"><div style="font-size:11px; color:#8a97ab">Нето за исплата</div><div style="font-size:16px; font-weight:800; color:#4caf7d">27.000</div></div>
+          </div>
+          <div style="font-size:13px; font-weight:800; margin:20px 0 10px 0">Алокации по клиент (D2)</div>
+          <div style="border:1px solid #eef2f7; border-radius:11px; overflow:hidden">
+            <div style="display:grid; grid-template-columns:1.5fr 1fr 1fr 1fr; padding:10px 16px; font-size:11px; font-weight:700; color:#8a97ab; text-transform:uppercase; border-bottom:1px solid #eef2f7"><div>Клиент</div><div>Износ</div><div>Billable</div><div>Ефект</div></div>
+            <div style="display:grid; grid-template-columns:1.5fr 1fr 1fr 1fr; padding:12px 16px; font-size:13px; border-bottom:1px solid #f2f5f9; align-items:center">
+              <div style="font-weight:700">Астибо АД</div><div>18.000 (60%)</div><div><span style="font-size:11px; font-weight:700; padding:2px 9px; border-radius:10px; background:#e8f5ee; color:#2e7d55">ДА</span></div><div style="font-size:11.5px; color:#8a97ab">→ ACTORS ставка на фактура</div>
+            </div>
+            <div style="display:grid; grid-template-columns:1.5fr 1fr 1fr 1fr; padding:12px 16px; font-size:13px; align-items:center">
+              <div style="font-weight:700">Интерно</div><div>12.000 (40%)</div><div><span style="font-size:11px; font-weight:700; padding:2px 9px; border-radius:10px; background:#f0f4f9; color:#8a97ab">НЕ</span></div><div style="font-size:11.5px; color:#8a97ab">→ само маргина</div>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px; margin-top:16px">
+            <div onClick="{{ payContractor }}" style="font-size:13px; font-weight:700; color:#fff; background:{{ accent }}; border-radius:9px; padding:10px 18px; cursor:pointer" style-hover="opacity:0.9">{{ payLabel }}</div>
+            <div style="font-size:11.5px; color:#8a97ab">{{ payNote }}</div>
+          </div>
+          <sc-if value="{{ paid }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#e8f5ee; border:1px solid #cfe9db; border-radius:10px; padding:12px 16px; margin-top:14px; font-size:12.5px; color:#2e7d55; font-weight:600">✓ Кеш-исплата 27.000 · КАСА-ИСПЛАТИ бр. 214 · автоматски создаден Expense(ACTORS) 18.000 за Астибо АД, isBillable — влегува во следната фактура (W1). B16: втора ставка структурно невозможна.</div>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ ИЗВЕШТАИ ============ -->
+    <sc-if value="{{ isReports }}" hint-placeholder-val="{{ false }}">
+      <div style="display:grid; grid-template-columns:1.3fr 1fr; gap:16px">
+        <div style="background:#fff; border:1px solid #e7ecf3; border-radius:14px; padding:22px">
+          <div style="font-size:14px; font-weight:800; margin-bottom:16px">Маргина по клиент — YTD 2026</div>
+          <sc-for list="{{ margins }}" as="m" hint-placeholder-count="5">
+            <div style="margin-bottom:14px">
+              <div style="display:flex; justify-content:space-between; font-size:12.5px; margin-bottom:5px"><span style="font-weight:700">{{ m.name }}</span><span style="color:#8a97ab">{{ m.text }}</span></div>
+              <div style="height:10px; background:#eef2f7; border-radius:5px; overflow:hidden"><div style="height:100%; background:{{ m.color }}; border-radius:5px; width:{{ m.pct }}"></div></div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:16px">
+          <div style="background:#fff; border:1px solid #e7ecf3; border-radius:14px; padding:22px">
+            <div style="font-size:14px; font-weight:800; margin-bottom:14px">Aging на побарувања</div>
+            <sc-for list="{{ aging }}" as="a" hint-placeholder-count="4">
+              <div style="display:flex; align-items:center; gap:10px; padding:7px 0; font-size:12.5px">
+                <div style="width:70px; color:#8a97ab; font-weight:600">{{ a.bucket }}</div>
+                <div style="flex:1; height:9px; background:#eef2f7; border-radius:5px; overflow:hidden"><div style="height:100%; background:{{ a.color }}; border-radius:5px; width:{{ a.pct }}"></div></div>
+                <div style="width:80px; text-align:right; font-weight:700">{{ a.amt }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="background:#1a2333; border-radius:14px; padding:22px; color:#fff">
+            <div style="font-size:14px; font-weight:800">Пакет за сметководител (W9)</div>
+            <div style="font-size:12px; color:#9daabd; margin-top:6px">Јуни 2026 · затворен 05.07 · 6 папки, 142 документи</div>
+            <div onClick="{{ toastZip }}" style="display:inline-block; margin-top:14px; background:{{ accent }}; color:#fff; font-size:12.5px; font-weight:700; border-radius:8px; padding:8px 16px; cursor:pointer" style-hover="opacity:0.9">⬇ Преземи ZIP</div>
+          </div>
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-top:16px">
+        <sc-for list="{{ plCards }}" as="p" hint-placeholder-count="4">
+          <div style="background:#fff; border:1px solid #e7ecf3; border-radius:14px; padding:18px 20px"><div style="font-size:12px; color:#8a97ab; font-weight:600">{{ p.label }}</div><div style="font-size:22px; font-weight:800; margin-top:5px; color:{{ p.color }}">{{ p.value }}</div></div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <!-- ============ ПОДЕСУВАЊА ============ -->
+    <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px">
+        <sc-for list="{{ settings }}" as="s" hint-placeholder-count="6">
+          <div onClick="{{ s.go }}" style="background:#fff; border:1px solid #e7ecf3; border-radius:14px; padding:22px; cursor:pointer" style-hover="border-color:#b9cff0">
+            <div style="font-size:22px">{{ s.icon }}</div>
+            <div style="font-size:14px; font-weight:800; margin-top:10px">{{ s.label }}</div>
+            <div style="font-size:12px; color:#8a97ab; margin-top:5px">{{ s.sub }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    </div>
+  </div>
+
+  <!-- ============ TOAST ============ -->
+  <sc-if value="{{ toastMsg }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; bottom:26px; left:50%; transform:translateX(-50%); background:#1a2333; color:#fff; font-size:13px; font-weight:600; border-radius:12px; padding:12px 22px; z-index:90; box-shadow:0 12px 32px rgba(10,20,40,0.3); animation:fadeUp .2s ease; max-width:560px">{{ toastMsg }}</div>
+  </sc-if>
+
+  <!-- ============ WIZARD MODAL ============ -->
+  <sc-if value="{{ wizardOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeWizard }}" style="position:fixed; inset:0; background:rgba(20,30,48,0.45); display:flex; align-items:center; justify-content:center; z-index:60">
+      <div onClick="{{ stop }}" style="background:#fff; border-radius:18px; width:560px; padding:30px; animation:fadeUp .2s ease">
+        <div style="display:flex; align-items:center; justify-content:space-between"><div style="font-size:17px; font-weight:800; white-space:nowrap">Нов клиент</div><div onClick="{{ closeWizard }}" style="cursor:pointer; color:#8a97ab; font-size:18px">✕</div></div>
+        <div style="display:flex; gap:6px; margin:18px 0 22px 0">
+          <sc-for list="{{ wizardSteps }}" as="ws" hint-placeholder-count="5">
+            <div style="flex:1; height:4px; border-radius:2px; background:{{ ws.bg }}"></div>
+          </sc-for>
+        </div>
+        <div style="font-size:12px; font-weight:700; color:#8a97ab; text-transform:uppercase; letter-spacing:0.5px">Чекор {{ wizardStep }} од 5 · {{ wizardStepLabel }}</div>
+        <sc-if value="{{ wizardIs1 }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:16px; display:flex; flex-direction:column; gap:12px">
+            <input placeholder="Име на клиент" style="border:1px solid #dfe6ef; border-radius:9px; padding:11px 14px; font-size:14px; font-family:'Manrope',sans-serif; outline:none" />
+            <input placeholder="Контакт email" style="border:1px solid #dfe6ef; border-radius:9px; padding:11px 14px; font-size:14px; font-family:'Manrope',sans-serif; outline:none" />
+          </div>
+        </sc-if>
+        <sc-if value="{{ wizardIs2 }}" hint-placeholder-val="{{ false }}">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px">
+            <div onClick="{{ setChInvoice }}" style="border:2px solid {{ chInvBorder }}; border-radius:12px; padding:16px; cursor:pointer">
+              <div style="font-size:14px; font-weight:800">📄 Фактура</div><div style="font-size:12px; color:#8a97ab; margin-top:5px">+18% ДДВ · бара ЕДБ · email испорака</div>
+            </div>
+            <div onClick="{{ setChCash }}" style="border:2px solid {{ chCashBorder }}; border-radius:12px; padding:16px; cursor:pointer">
+              <div style="font-size:14px; font-weight:800">💵 Кеш</div><div style="font-size:12px; color:#8a97ab; margin-top:5px">без ДДВ · интерна обврска · не се испраќа</div>
+            </div>
+            <sc-if value="{{ wizardIsInvoice }}" hint-placeholder-val="{{ false }}">
+              <input placeholder="ЕДБ (даночен број) — задолжително" style="grid-column:1/-1; border:1px solid #dfe6ef; border-radius:9px; padding:11px 14px; font-size:14px; font-family:'Manrope',sans-serif; outline:none" />
+            </sc-if>
+          </div>
+        </sc-if>
+        <sc-if value="{{ wizardIs3 }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:16px">
+            <input value="{{ wizardAmount }}" onChange="{{ setAmount }}" style="border:1px solid #dfe6ef; border-radius:9px; padding:11px 14px; font-size:14px; font-family:'Manrope',sans-serif; outline:none; width:200px" />
+            <span style="font-size:13px; color:#8a97ab; margin-left:8px">ден/месец основица</span>
+            <div style="background:#f8fafc; border-radius:11px; padding:16px 18px; margin-top:14px; display:flex; gap:26px; white-space:nowrap">
+              <div><div style="font-size:11px; color:#8a97ab">Основица</div><div style="font-size:16px; font-weight:800">{{ vatBase }}</div></div>
+              <div><div style="font-size:11px; color:#8a97ab">ДДВ 18%</div><div style="font-size:16px; font-weight:800; color:{{ vatColor }}">{{ vatAmt }}</div></div>
+              <div><div style="font-size:11px; color:#8a97ab">Вкупно за наплата</div><div style="font-size:16px; font-weight:800; color:{{ accent }}">{{ vatTotal }}</div></div>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ wizardIs4 }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:16px; display:flex; flex-direction:column; gap:10px">
+            <div style="border:1px solid #eef2f7; border-radius:10px; padding:12px 16px; display:flex; justify-content:space-between; font-size:13px"><span style="font-weight:700">Meta Ads 1:1</span><span style="color:#8a97ab">AdAccount: 2396006970755280</span></div>
+            <div style="border:1px solid #eef2f7; border-radius:10px; padding:12px 16px; display:flex; justify-content:space-between; font-size:13px"><span style="font-weight:700">Актери (D2)</span><span style="color:#8a97ab">автоматски од хонорарски алокации</span></div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ wizardIs5 }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#e8f5ee; border:1px solid #cfe9db; border-radius:11px; padding:16px 18px; margin-top:16px; font-size:13px; color:#2e7d55; font-weight:600">✓ Спремно. Од 01.08.2026 клиентот влегува во W1 — автоматско месечно задолжување.</div>
+        </sc-if>
+        <div style="display:flex; justify-content:space-between; margin-top:24px">
+          <div onClick="{{ wizardBack }}" style="font-size:13px; font-weight:700; color:#5b6878; padding:10px 16px; cursor:pointer">← Назад</div>
+          <div onClick="{{ wizardNext }}" style="font-size:13px; font-weight:700; color:#fff; background:{{ accent }}; border-radius:9px; padding:10px 22px; cursor:pointer" style-hover="opacity:0.9">{{ wizardNextLabel }}</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ INVOICE PDF MODAL ============ -->
+  <sc-if value="{{ invoiceOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeInvoice }}" style="position:fixed; inset:0; background:rgba(20,30,48,0.55); display:flex; align-items:center; justify-content:center; z-index:60; padding:30px">
+      <div onClick="{{ stop }}" style="background:#fff; border-radius:6px; width:620px; max-height:92vh; overflow-y:auto; padding:48px 54px; animation:fadeUp .2s ease; box-shadow:0 24px 60px rgba(10,20,40,0.35); font-family:'Manrope',sans-serif">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start">
+          <div>
+            <div style="display:flex; align-items:center; gap:7px">
+              <div style="background:{{ accent }}; color:#fff; font-weight:800; font-size:13px; padding:3px 7px; border-radius:5px">GO</div>
+              <div style="font-weight:800; font-size:13px; letter-spacing:2px; color:{{ accent }}">DIGITAL</div>
+            </div>
+            <div style="font-size:12px; font-weight:800; margin-top:12px">АЛМА ДИЗАЈН ДООЕЛ Скопје</div>
+            <div style="font-size:11px; color:#5b6878; margin-top:3px; line-height:1.6">Даночен број: 4032023558371<br>Жиро сметка: 210-0768360001-38<br>НЛБ Банка АД Скопје</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:20px; font-weight:800">ФАКТУРА</div>
+            <div style="font-size:14px; font-weight:800; color:{{ accent }}; margin-top:4px">{{ inv.no }}</div>
+            <div style="font-size:11px; color:#5b6878; margin-top:8px; line-height:1.6">Датум на издавање: {{ inv.issued }}<br>Валута (рок): {{ inv.due }}</div>
+          </div>
+        </div>
+        <div style="background:#f8fafc; border-radius:8px; padding:14px 18px; margin-top:26px">
+          <div style="font-size:10px; font-weight:700; color:#8a97ab; text-transform:uppercase; letter-spacing:1px">Примач</div>
+          <div style="font-size:13px; font-weight:800; margin-top:4px">{{ inv.client }}</div>
+          <div style="font-size:11px; color:#5b6878; margin-top:2px">{{ inv.clientMeta }}</div>
+        </div>
+        <div style="margin-top:24px">
+          <div style="display:grid; grid-template-columns:2.4fr 1fr 0.7fr 1fr; padding:9px 0; font-size:10px; font-weight:700; color:#8a97ab; text-transform:uppercase; letter-spacing:0.8px; border-bottom:2px solid #1a2333"><div>Опис</div><div style="text-align:right">Основица</div><div style="text-align:right">ДДВ</div><div style="text-align:right">Износ</div></div>
+          <sc-for list="{{ inv.lines }}" as="l" hint-placeholder-count="3">
+            <div style="display:grid; grid-template-columns:2.4fr 1fr 0.7fr 1fr; padding:11px 0; font-size:12px; border-bottom:1px solid #eef2f7">
+              <div><div style="font-weight:700">{{ l.desc }}</div><div style="font-size:10.5px; color:#8a97ab; margin-top:2px">{{ l.sub }}</div></div>
+              <div style="text-align:right">{{ l.base }}</div>
+              <div style="text-align:right; color:#8a97ab">18%</div>
+              <div style="text-align:right; font-weight:700">{{ l.base }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex; justify-content:flex-end; margin-top:18px">
+          <div style="width:240px">
+            <div style="display:flex; justify-content:space-between; font-size:12px; padding:5px 0"><span style="color:#5b6878">Основица</span><span style="font-weight:700">{{ inv.subtotal }}</span></div>
+            <div style="display:flex; justify-content:space-between; font-size:12px; padding:5px 0"><span style="color:#5b6878">ДДВ 18%</span><span style="font-weight:700">{{ inv.vat }}</span></div>
+            <div style="display:flex; justify-content:space-between; font-size:15px; padding:10px 0; border-top:2px solid #1a2333; margin-top:6px"><span style="font-weight:800">ВКУПНО</span><span style="font-weight:800">{{ inv.total }} ден</span></div>
+          </div>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:44px">
+          <div style="font-size:10.5px; color:#8a97ab; line-height:1.7">При плаќање наведете повикување на број: <b style="color:#1a2333">{{ inv.no }}</b><br>Фактурата е изготвена електронски.</div>
+          <div style="text-align:center"><div style="width:160px; border-bottom:1px solid #5b6878; margin-bottom:6px"></div><div style="font-size:10.5px; color:#5b6878">Потпис на овластено лице</div></div>
+        </div>
+        <div onClick="{{ closeInvoice }}" style="text-align:center; margin-top:30px; font-size:12px; font-weight:700; color:{{ accent }}; cursor:pointer">Затвори преглед</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ MOBILE PWA OVERLAY ============ -->
+  <sc-if value="{{ mobileOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeMobile }}" style="position:fixed; inset:0; background:rgba(20,30,48,0.55); display:flex; align-items:center; justify-content:center; z-index:60; gap:34px">
+      <div onClick="{{ stop }}" style="width:375px; height:740px; background:#0e1420; border-radius:44px; padding:12px; box-shadow:0 30px 80px rgba(0,0,0,0.45); flex-shrink:0">
+        <div style="background:#f6f8fb; border-radius:34px; height:100%; overflow:hidden; display:flex; flex-direction:column">
+          <div style="background:#fff; padding:14px 20px 12px 20px; border-bottom:1px solid #e7ecf3">
+            <div style="display:flex; justify-content:space-between; font-size:11px; font-weight:700; color:#1a2333; padding-bottom:8px"><span>21:47</span><span>GoDigital PWA · 5G ▮</span></div>
+            <div style="display:flex; align-items:center; gap:8px">
+              <div onClick="{{ closeMobile }}" style="font-size:16px; cursor:pointer; color:#5b6878">‹</div>
+              <div style="font-size:15px; font-weight:800">Нов кеш-трошок</div>
+              <div style="margin-left:auto; font-size:10px; font-weight:700; color:#8a97ab; background:#f0f4f9; border-radius:5px; padding:2px 7px">W6</div>
+            </div>
+          </div>
+          <div style="flex:1; overflow-y:auto; padding:18px 20px">
+            <div onClick="{{ takePhoto }}" style="border:2px dashed {{ photoBorder }}; background:{{ photoBg }}; border-radius:16px; height:170px; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; gap:8px">
+              <div style="font-size:34px">{{ photoIcon }}</div>
+              <div style="font-size:13px; font-weight:700; color:{{ photoTextColor }}">{{ photoText }}</div>
+              <div style="font-size:11px; color:#8a97ab">{{ photoSub }}</div>
+            </div>
+            <sc-if value="{{ hasPhoto }}" hint-placeholder-val="{{ false }}">
+              <div style="background:#eef4fd; border-radius:10px; padding:10px 14px; margin-top:12px; font-size:11.5px; color:#2a5cab; font-weight:600">✦ OCR: препознаено „ОКТА · 1.240,00 · 15.07.2026" — полињата се пополнети</div>
+            </sc-if>
+            <div style="margin-top:18px; display:flex; flex-direction:column; gap:12px">
+              <div><div style="font-size:11px; font-weight:700; color:#8a97ab; margin-bottom:6px">ИЗНОС (МКД)</div><div style="background:#fff; border:1px solid #dfe6ef; border-radius:11px; padding:13px 15px; font-size:17px; font-weight:800">{{ mobAmount }}</div></div>
+              <div><div style="font-size:11px; font-weight:700; color:#8a97ab; margin-bottom:6px">КАТЕГОРИЈА</div>
+                <div style="display:flex; gap:7px; flex-wrap:wrap">
+                  <sc-for list="{{ mobCats }}" as="mc" hint-placeholder-count="5">
+                    <div onClick="{{ mc.go }}" style="font-size:12px; font-weight:700; padding:8px 13px; border-radius:18px; cursor:pointer; background:{{ mc.bg }}; color:{{ mc.color }}; border:1px solid {{ mc.border }}">{{ mc.label }}</div>
+                  </sc-for>
+                </div>
+              </div>
+              <div><div style="font-size:11px; font-weight:700; color:#8a97ab; margin-bottom:6px">ОПИС</div><div style="background:#fff; border:1px solid #dfe6ef; border-radius:11px; padding:13px 15px; font-size:14px">{{ mobDesc }}</div></div>
+            </div>
+            <sc-if value="{{ mobSaved }}" hint-placeholder-val="{{ false }}">
+              <div style="background:#e8f5ee; border:1px solid #cfe9db; border-radius:12px; padding:14px 16px; margin-top:16px; font-size:12.5px; color:#2e7d55; font-weight:600">✓ Атомски запис: Expense + CashLedgerEntry + слика. Салдо на благајна: 85.110 ден.</div>
+            </sc-if>
+          </div>
+          <div style="padding:14px 20px 26px 20px; background:#fff; border-top:1px solid #e7ecf3">
+            <div onClick="{{ saveMobile }}" style="border-radius:13px; padding:15px; text-align:center; font-size:14px; font-weight:800; cursor:pointer; background:{{ saveBg }}; color:{{ saveColor }}">{{ saveLabel }}</div>
+            <div style="font-size:10.5px; color:{{ saveHintColor }}; text-align:center; margin-top:8px; font-weight:600">{{ saveHint }}</div>
+          </div>
+        </div>
+      </div>
+      <div onClick="{{ stop }}" style="color:#fff; max-width:250px">
+        <div style="font-size:15px; font-weight:800">Мобилен PWA внес (W6)</div>
+        <div style="font-size:12.5px; color:#b8c2d1; margin-top:8px; line-height:1.7">Камера → OCR prefill → категорија → атомско зачувување. Правило B5: кеш-трошок без слика е блокиран — пробај „Зачувај" без фотографија.</div>
+        <div onClick="{{ closeMobile }}" style="font-size:12px; font-weight:700; color:#fff; border:1px solid rgba(255,255,255,0.35); border-radius:8px; padding:7px 14px; display:inline-block; margin-top:14px; cursor:pointer">Затвори ✕</div>
+      </div>
+    </div>
+  </sc-if>
+</div></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;accent&quot;: {&quot;editor&quot;: &quot;color&quot;, &quot;default&quot;: &quot;#3b76d1&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;options&quot;: [&quot;#3b76d1&quot;, &quot;#2a9d8f&quot;, &quot;#7c5cd6&quot;, &quot;#1a2333&quot;]}}">
+class Component extends DCLogic {
+  state = {
+    screen: 'dashboard', clientFilter: 'Сите', selectedClient: null,
+    wizardOpen: false, wizardStep: 1, wizardChannel: 'INVOICE', wizardAmount: '30000',
+    invoiceOpen: false, invoiceFor: null, approved: [], queueTab: 0,
+    mobileOpen: false, hasPhoto: false, mobCat: 'Гориво', mobSaved: false, saveTried: false,
+    paid: false, toastMsg: null, resolvedQueue: [], selContractor: 'Вања С.'
+  };
+  toast(msg) {
+    clearTimeout(this._tt);
+    this.setState({ toastMsg: msg });
+    this._tt = setTimeout(() => this.setState({ toastMsg: null }), 3800);
+  }
+  fmt(n) { return n.toLocaleString('de-DE'); }
+  clientsData() {
+    return [
+      { id: 1, name: 'Астибо АД', channel: 'ФАКТУРА', pkg: 30000, open: 35400, extras: 'Meta Ads · Актери', edb: 'ЕДБ 4030998112345 · рок 15 дена' },
+      { id: 2, name: 'Дентал Лукс', channel: 'ФАКТУРА', pkg: 25000, open: 0, extras: 'Meta Ads', edb: 'ЕДБ 4057014223311 · рок 15 дена' },
+      { id: 3, name: 'Авто Центар ВС', channel: 'ФАКТУРА', pkg: 22000, open: 51920, extras: '—', edb: 'ЕДБ 4028003334455 · рок 30 дена' },
+      { id: 4, name: 'Фитнес М1', channel: 'КЕШ', pkg: 15000, open: 30000, extras: 'Meta Ads', edb: 'кеш клиент · месечна обврска' },
+      { id: 5, name: 'Пекара Силбо', channel: 'ФАКТУРА', pkg: 18000, open: 21240, extras: '—', edb: 'ЕДБ 4030011556677 · рок 15 дена' },
+      { id: 6, name: 'Кафе Бар Мока', channel: 'КЕШ', pkg: 12000, open: 12000, extras: '—', edb: 'кеш клиент · месечна обврска' },
+      { id: 7, name: 'Хотел Панорама', channel: 'ФАКТУРА', pkg: 40000, open: 0, extras: 'Meta Ads · Актери', edb: 'ЕДБ 4080009887766 · рок 15 дена' },
+      { id: 8, name: 'Салон Естетика', channel: 'КЕШ', pkg: 10000, open: 0, extras: 'Meta Ads', edb: 'кеш клиент · месечна обврска' }
+    ];
+  }
+  chargesData() {
+    return [
+      { id: 'c1', client: 'Астибо АД', kind: 'INVOICE', no: '1-2/7-2026', subtotal: 48000, status: 'OPEN', lines: [
+        { desc: 'Месечен пакет — дигитален маркетинг', sub: 'ServicePackage v3 · јули 2026', base: 30000 },
+        { desc: 'Meta Ads — префактурирање 1:1', sub: '2 кампањи · sourceRefs: 2 Expenses', base: 5300 },
+        { desc: 'Актери — видео продукција', sub: 'D2: хонорарска алокација, Вања С.', base: 12700 }] },
+      { id: 'c2', client: 'Хотел Панорама', kind: 'INVOICE', no: '1-1/7-2026', subtotal: 40000, status: 'PAID', lines: [{ desc: 'Месечен пакет — дигитален маркетинг', sub: 'ServicePackage v1 · јули 2026', base: 40000 }] },
+      { id: 'c3', client: 'Дентал Лукс', kind: 'INVOICE', no: '1-3/7-2026', subtotal: 27200, status: 'OPEN', lines: [
+        { desc: 'Месечен пакет — дигитален маркетинг', sub: 'ServicePackage v2 · јули 2026', base: 25000 },
+        { desc: 'Meta Ads — префактурирање 1:1', sub: '1 кампања · sourceRef: 1 Expense', base: 2200 }] },
+      { id: 'c4', client: 'Авто Центар ВС', kind: 'INVOICE', no: null, subtotal: 22000, status: 'DRAFT', lines: [{ desc: 'Месечен пакет — дигитален маркетинг', sub: 'ServicePackage v1 · јули 2026', base: 22000 }] },
+      { id: 'c5', client: 'Пекара Силбо', kind: 'INVOICE', no: null, subtotal: 18000, status: 'DRAFT', lines: [{ desc: 'Месечен пакет — дигитален маркетинг', sub: 'ServicePackage v2 · јули 2026', base: 18000 }] },
+      { id: 'c6', client: 'Фитнес М1', kind: 'CASH_OBLIGATION', no: null, subtotal: 15000, status: 'OPEN' },
+      { id: 'c7', client: 'Кафе Бар Мока', kind: 'CASH_OBLIGATION', no: null, subtotal: 12000, status: 'PARTIALLY_PAID' }
+    ];
+  }
+  statusBadge(s) {
+    const map = {
+      DRAFT: ['#f0f4f9', '#5b6878', 'DRAFT'], OPEN: ['#eef4fd', '#2a5cab', 'OPEN'],
+      PARTIALLY_PAID: ['#fdf4e5', '#a3690f', 'ДЕЛУМНО'], PAID: ['#e8f5ee', '#2e7d55', 'PAID'],
+      OVERDUE: ['#fdecec', '#c2483f', 'OVERDUE']
+    };
+    return map[s] || map.OPEN;
+  }
+  renderVals() {
+    const st = this.state;
+    const accent = this.props.accent ?? '#3b76d1';
+    const go = (screen) => () => this.setState({ screen, selectedClient: null });
+    const t0res = st.resolvedQueue.length; // само tab0 ставки се решливи
+    const qCounts = [3 - t0res, 1, 1, 0];
+    const importBadge = qCounts[0] + qCounts[1] + qCounts[2];
+    const titles = { dashboard: 'Dashboard', clients: 'Клиенти', charges: 'Задолжувања', import: 'Import центар', cash: 'Благајна', contractors: 'Хонорарци', reports: 'Извештаи', settings: 'Подесувања' };
+    const navDefs = [
+      ['dashboard', '◧', 'Dashboard'], ['clients', '◔', 'Клиенти'], ['charges', '▤', 'Задолжувања'],
+      ['import', '⇣', 'Import центар', importBadge], ['cash', '▦', 'Благајна'], ['contractors', '◑', 'Хонорарци'],
+      ['reports', '◫', 'Извештаи'], ['settings', '◕', 'Подесувања']
+    ];
+    const nav = navDefs.map(([id, icon, label, badge]) => ({
+      id, icon, label, badge: badge || false, go: go(id),
+      bg: st.screen === id ? '#eef4fd' : 'transparent',
+      color: st.screen === id ? accent : '#3d4a5e',
+      weight: st.screen === id ? 800 : 600
+    }));
+    // clients
+    const allClients = this.clientsData();
+    const filtered = allClients.filter(c => st.clientFilter === 'Сите' || (st.clientFilter === 'Фактура' ? c.channel === 'ФАКТУРА' : c.channel === 'КЕШ'));
+    const clients = filtered.map(c => ({
+      name: c.name, channel: c.channel, pkg: this.fmt(c.pkg) + ' ден',
+      openAmt: c.open ? this.fmt(c.open) : '—', openColor: c.open ? '#c2483f' : '#8a97ab',
+      extras: c.extras, status: 'ACTIVE', init: c.name.slice(0, 2).toUpperCase(),
+      chBg: c.channel === 'ФАКТУРА' ? '#eef4fd' : '#fdf4e5', chColor: c.channel === 'ФАКТУРА' ? '#2a5cab' : '#a3690f',
+      open: () => this.setState({ selectedClient: c.id })
+    }));
+    const clientFilters = ['Сите', 'Фактура', 'Кеш'].map(f => ({
+      label: f, go: () => this.setState({ clientFilter: f }),
+      bg: st.clientFilter === f ? accent : '#fff', color: st.clientFilter === f ? '#fff' : '#5b6878',
+      border: st.clientFilter === f ? accent : '#e7ecf3'
+    }));
+    // profile
+    const pc = allClients.find(c => c.id === st.selectedClient) || allClients[0];
+    const profile = {
+      name: pc.name, init: pc.name.slice(0, 2).toUpperCase(), meta: pc.edb, channel: pc.channel,
+      chBg: pc.channel === 'ФАКТУРА' ? '#eef4fd' : '#fdf4e5', chColor: pc.channel === 'ФАКТУРА' ? '#2a5cab' : '#a3690f',
+      pkg: this.fmt(pc.pkg), openAmt: pc.open ? this.fmt(pc.open) : '0', margin: '38%', credit: '0',
+      versions: [
+        { amt: this.fmt(pc.pkg) + ' ден/мес', range: 'од 01.03.2026 — активна', dot: '#4caf7d' },
+        { amt: this.fmt(Math.round(pc.pkg * 0.85)) + ' ден/мес', range: '01.09.2025 — 28.02.2026', dot: '#c9d3e0' }
+      ],
+      extras: pc.extras === '—' ? [{ label: 'Нема темплејти', mode: '—', amt: '' }] :
+        pc.extras.split(' · ').map(x => ({ label: x, mode: 'PASSTHROUGH_ACTUAL', amt: 'реален износ' })),
+      charges: ['2026-07', '2026-06', '2026-05', '2026-04'].map((p, i) => {
+        const s = i === 0 ? (pc.open ? 'OPEN' : 'PAID') : 'PAID';
+        const [bg, color, label] = this.statusBadge(s);
+        return { period: p, no: pc.channel === 'ФАКТУРА' ? `1-${2 + i}/${7 - i}-2026` : 'кеш обврска', amt: this.fmt(pc.channel === 'ФАКТУРА' ? Math.round(pc.pkg * 1.18) : pc.pkg) + ' ден', bg, color, label };
+      })
+    };
+    // charges screen
+    const charges = this.chargesData().map(ch => {
+      const eff = st.approved.includes(ch.id) ? 'OPEN' : ch.status;
+      const isInv = ch.kind === 'INVOICE';
+      const vat = isInv ? Math.round(ch.subtotal * 0.18) : 0;
+      const no = ch.no || (st.approved.includes(ch.id) ? (ch.id === 'c4' ? '1-4/7-2026' : '1-5/7-2026') : '—');
+      const [bg, color, label] = this.statusBadge(eff);
+      const hasPdf = isInv && eff !== 'DRAFT';
+      return {
+        client: ch.client, kind: isInv ? 'ФАКТУРА' : 'КЕШ ОБВ.', no,
+        noColor: hasPdf ? accent : '#8a97ab', noCursor: hasPdf ? 'pointer' : 'default',
+        subtotal: this.fmt(ch.subtotal), vat: isInv ? this.fmt(vat) : '—', total: this.fmt(ch.subtotal + vat),
+        bg, color, label, canApprove: eff === 'DRAFT', canPdf: hasPdf,
+        approve: () => this.setState(s => ({ approved: [...s.approved, ch.id] })),
+        preview: hasPdf ? (() => this.setState({ invoiceOpen: true, invoiceFor: ch.id })) : (() => {})
+      };
+    });
+    // invoice modal
+    const ic = this.chargesData().find(c => c.id === st.invoiceFor) || this.chargesData()[0];
+    const icVat = Math.round(ic.subtotal * 0.18);
+    const icClient = allClients.find(c => c.name === ic.client) || allClients[0];
+    const inv = {
+      no: ic.no || '1-4/7-2026', issued: '01.07.2026', due: '16.07.2026',
+      client: ic.client, clientMeta: icClient.edb,
+      lines: (ic.lines || []).map(l => ({ desc: l.desc, sub: l.sub, base: this.fmt(l.base) })),
+      subtotal: this.fmt(ic.subtotal), vat: this.fmt(icVat), total: this.fmt(ic.subtotal + icVat)
+    };
+    // dashboard
+    const kpis = [
+      { label: 'Салдо банка (НЛБ)', value: '218.298 ден', sub: 'извод бр. 149 · 14.07', color: '#1a2333' },
+      { label: 'Салдо благајна', value: '86.350 ден', sub: 'попис ✓ 13.07', color: '#1a2333' },
+      { label: 'Задолжено — јули', value: '1.284.400', sub: '45 задолжувања', color: '#1a2333' },
+      { label: 'Наплатено — јули', value: '918.560', sub: '71,5% од задолженото', color: '#4caf7d' }
+    ];
+    const chargeBars = [
+      { label: 'Фактури (со ДДВ)', text: '704.560 / 986.400 ден', pct: '71%', color: accent },
+      { label: 'Кеш обврски', text: '214.000 / 298.000 ден', pct: '72%', color: '#e8a33d' }
+    ];
+    const debtors = [
+      { name: 'Авто Центар ВС', age: '2 фактури · 44 дена', amt: '51.920', init: 'АВ' },
+      { name: 'Астибо АД', age: '1 фактура · 12 дена', amt: '35.400', init: 'АС' },
+      { name: 'Фитнес М1', age: '2 кеш обврски', amt: '30.000', init: 'ФМ' },
+      { name: 'Пекара Силбо', age: '1 фактура · 8 дена', amt: '21.240', init: 'ПС' },
+      { name: 'Кафе Бар Мока', age: '1 кеш обврска', amt: '12.000', init: 'КБ' }
+    ];
+    const queues = [
+      { label: 'Нерешени извод-линии', count: qCounts[0], icon: '⚠', color: qCounts[0] ? '#c2483f' : '#4caf7d', go: go('import') },
+      { label: 'Meta receipts без линија', count: 1, icon: '⏳', color: '#e8a33d', go: go('import') },
+      { label: 'FACEBK без receipt', count: 1, icon: '❗', color: '#c2483f', go: go('import') },
+      { label: 'DRAFT за одобрување', count: 2, icon: '✎', color: accent, go: go('charges') }
+    ];
+    // import
+    const statements = [
+      { no: 149, date: '14.07.2026', src: 'Gmail авто', status: 'PARSED', bg: '#e8f5ee', color: '#2e7d55', open: '35.473', debit: '17.175', credit: '0', close: '18.298', count: '7/7', check: '✓ Интегритет: салдо + број налози + континуитет со извод 148', checkColor: '#2e7d55' },
+      { no: 148, date: '10.07.2026', src: 'Gmail авто', status: 'PARSED', bg: '#e8f5ee', color: '#2e7d55', open: '28.900', debit: '12.427', credit: '19.000', close: '35.473', count: '5/5', check: '✓ Интегритет потврден', checkColor: '#2e7d55' },
+      { no: 149, date: '14.07.2026', src: 'Рачен upload', status: 'ДУПЛИКАТ', bg: '#f0f4f9', color: '#8a97ab', open: '—', debit: '—', credit: '—', close: '—', count: '0', check: 'B13: тивко скокнат, 0 нови записи, логирано', checkColor: '#8a97ab' }
+    ];
+    const queueDefs = [
+      ['Извод-линии', 3], ['Receipts без линија', 1], ['FACEBK без receipt', 1], ['PARTIAL parse', 0]
+    ];
+    const queueTabs = queueDefs.map(([label], i) => ({
+      label, count: qCounts[i], go: () => this.setState({ queueTab: i }),
+      bg: st.queueTab === i ? accent : '#f0f4f9', color: st.queueTab === i ? '#fff' : '#5b6878'
+    }));
+    const queueContentRaw = [
+      [{ icon: '🏦', title: 'MBDP:8234 · НЕПОЗНАТ МЕРЧАНТ ДОО', amt: '−4.850', sub: 'CARD_TX без VendorRule · извод 149, линија 6', action: 'Класифицирај' },
+       { icon: '💰', title: 'Уплата „1-58/2026" — нема таков број', amt: '+18.000', sub: 'Нормализација неуспешна · fuzzy предлог: Пекара Силбо (историја)', action: 'Потврди предлог' },
+       { icon: '🏦', title: 'Дознака без повикување на број', amt: '+25.000', sub: 'IN линија · извод 148 · рачно спарување потребно', action: 'Спари со Charge' }],
+      [{ icon: '🧾', title: 'Receipt QEC8CTD652 · Астибо Ads', amt: '$107.00', sub: 'Чека FACEBK линија на извод · 2 дена (аларм на 7)', action: 'Детали' }],
+      [{ icon: '❗', title: 'FACEBK *BQCHDTM8B2 без receipt', amt: '−3.256', sub: 'Акаунт: Дентал Лукс Ads · аларм пратен веднаш', action: 'Провери Gmail' }],
+      [{ icon: '✓', title: 'Нема PARTIAL пораки', amt: '', sub: 'Сите Meta фактури парсирани комплетно', action: 'ОК', noResolve: true }]
+    ];
+    const resolveMsgs = {
+      'Класифицирај': 'Класифицирано како Expense — VendorRule зачуван, следен пат автоматски',
+      'Потврди предлог': 'Спарено: уплата 18.000 → Пекара Силбо · Charge PAID',
+      'Спари со Charge': 'Рачно спарено · Payment создаден · линија processed',
+      'Детали': 'Receipt останува во редица — чека FACEBK линија (аларм на ден 7)',
+      'Провери Gmail': 'Отворен Gmail филтер за Дентал Лукс Ads · порака не е најдена',
+      'ОК': 'Нема отворени ставки'
+    };
+    const queueContent = queueContentRaw.map(tab => tab
+      .filter(qi => !st.resolvedQueue.includes(qi.title))
+      .map(qi => ({ ...qi, resolve: () => {
+        if (qi.noResolve || qi.action === 'Детали' || qi.action === 'Провери Gmail') { this.toast(resolveMsgs[qi.action]); return; }
+        this.setState(s => ({ resolvedQueue: [...s.resolvedQueue, qi.title] }));
+        this.toast('✓ ' + resolveMsgs[qi.action]);
+      } })));
+    // cash
+    const cashEntries = [
+      { date: '14.07', desc: 'Наплата — Фитнес М1, јули', doc: 'ФИСКАЛНА бр. 0482 (D6)', party: 'CLIENT', amt: '+15.000', color: '#4caf7d', photo: '' },
+      { date: '14.07', desc: 'Гориво — Окта', doc: 'КАСА-ИСПЛАТИ бр. 213', party: 'VENDOR', amt: '−1.240', color: '#c2483f', photo: '📎' },
+      { date: '12.07', desc: 'Хонорар — Вања С. (нето)', doc: 'КАСА-ИСПЛАТИ бр. 212 + договор', party: 'CONTRACTOR', amt: '−27.000', color: '#c2483f', photo: '📎' },
+      { date: '11.07', desc: 'Наплата — Кафе Бар Мока (делумно)', doc: 'ФИСКАЛНА бр. 0479', party: 'CLIENT', amt: '+8.000', color: '#4caf7d', photo: '' },
+      { date: '10.07', desc: 'Канцелариски материјали', doc: 'КАСА-ИСПЛАТИ бр. 211', party: 'VENDOR', amt: '−2.360', color: '#c2483f', photo: '📎' },
+      { date: '08.07', desc: 'Наплата — Салон Естетика, јули', doc: 'ФИСКАЛНА бр. 0475', party: 'CLIENT', amt: '+10.000', color: '#4caf7d', photo: '' }
+    ];
+    // contractors
+    const contractors = [
+      { name: 'Вања С.', type: 'Договор на дело · WITHHOLD_10', rate: '30.000', talent: '🎬', sel: true },
+      { name: 'Марко Т.', type: 'Договор на дело · WITHHOLD_10', rate: '20.000', talent: '🎬', sel: false },
+      { name: 'Елена П.', type: 'Фактура · NO_WITHHOLDING (B8)', rate: '35.000', talent: '', sel: false },
+      { name: 'Дарко Ј.', type: 'Договор на дело · WITHHOLD_10', rate: '15.000', talent: '', sel: false }
+    ].map(c => ({ ...c, init: c.name.slice(0, 2).toUpperCase(),
+      sel: c.name === st.selContractor,
+      bg: c.name === st.selContractor ? '#eef4fd' : '#fff',
+      open: c.name === 'Вања С.'
+        ? () => this.setState({ selContractor: c.name })
+        : () => { this.setState({ selContractor: c.name }); this.toast('Демо: детална пресметка е изработена за Вања С. (acceptance тест T13)'); } }));
+    // reports
+    const margins = [
+      { name: 'Хотел Панорама', text: '52% · 124.800 ден', pct: '52%', color: '#4caf7d' },
+      { name: 'Астибо АД', text: '38% · 68.400 ден', pct: '38%', color: '#4caf7d' },
+      { name: 'Дентал Лукс', text: '35% · 52.500 ден', pct: '35%', color: '#4caf7d' },
+      { name: 'Фитнес М1', text: '22% · 19.800 ден', pct: '22%', color: '#e8a33d' },
+      { name: 'Кафе Бар Мока', text: '9% · 6.480 ден', pct: '9%', color: '#c2483f' }
+    ];
+    const aging = [
+      { bucket: '0–15 д.', amt: '56.640', pct: '38%', color: '#4caf7d' },
+      { bucket: '16–30 д.', amt: '42.000', pct: '28%', color: '#e8a33d' },
+      { bucket: '31–60 д.', amt: '51.920', pct: '34%', color: '#c2483f' },
+      { bucket: '60+ д.', amt: '0', pct: '0%', color: '#c2483f' }
+    ];
+    const plCards = [
+      { label: 'Приходи YTD', value: '7.842.000', color: '#1a2333' },
+      { label: 'Трошоци YTD', value: '5.318.400', color: '#1a2333' },
+      { label: 'Добивка YTD', value: '2.523.600', color: '#4caf7d' },
+      { label: 'Cash flow — јули', value: '+186.350', color: '#4caf7d' }
+    ];
+    const settingsRaw = [
+      { icon: '％', label: 'ДДВ и законски параметри', sub: 'Стапка 18% · конфигурација (B11)' },
+      { icon: '🏦', label: 'Банка и почетни салда', sub: 'НЛБ 210-0768360001-38' },
+      { icon: '▣', label: 'Ad акаунти', sub: '6 мапирани · 1 сопствен маркетинг' },
+      { icon: '⚙', label: 'Vendor правила', sub: '14 правила · PETROL→Гориво...' },
+      { icon: '◔', label: 'Корисници и улоги (RBAC)', sub: '3 корисници' },
+      { icon: '#', label: 'Нумерација на фактури', sub: '1-{n}/{M}-{YYYY} · следен: 1-6/7-2026' }
+    ];
+    const settings = settingsRaw.map(s => ({ ...s, go: () => this.toast('⚙ ' + s.label + ' — детален екран следи во фаза на изградба') }));
+    // wizard
+    const amt = parseInt(st.wizardAmount) || 0;
+    const isInvW = st.wizardChannel === 'INVOICE';
+    const vat = isInvW ? Math.round(amt * 0.18) : 0;
+    const stepLabels = ['Основни податоци', 'Канал на наплата', 'Месечен пакет', 'Дополнителни ставки', 'Потврда'];
+    // mobile
+    const canSave = st.hasPhoto;
+    const mobCats = ['Гориво', 'Тековни', 'Опрема', 'Реклами', 'Друго'].map(c => ({
+      label: c, go: () => this.setState({ mobCat: c }),
+      bg: st.mobCat === c ? accent : '#fff', color: st.mobCat === c ? '#fff' : '#5b6878',
+      border: st.mobCat === c ? accent : '#dfe6ef'
+    }));
+    return {
+      accent, nav, screenTitle: titles[st.screen],
+      isDashboard: st.screen === 'dashboard',
+      isClientsList: st.screen === 'clients' && !st.selectedClient,
+      isClientProfile: st.screen === 'clients' && !!st.selectedClient,
+      isCharges: st.screen === 'charges', isImport: st.screen === 'import',
+      isCash: st.screen === 'cash', isContractors: st.screen === 'contractors',
+      isReports: st.screen === 'reports', isSettings: st.screen === 'settings',
+      kpis, chargeBars, debtors, queues, clients, clientFilters, profile, charges,
+      statements, queueTabs, cashEntries,
+      queueItems: queueContent[st.queueTab].length ? queueContent[st.queueTab] : [{ icon: '✓', title: 'Редицата е празна', amt: '', sub: 'Сите ставки се решени — линиите се processed', action: 'ОК', resolve: () => {} }],
+      toastMsg: st.toastMsg,
+      toastMonth: () => this.toast('Демо: прикажан е јули 2026 · навигација по месеци следи во изградба'),
+      toastCreditNote: () => this.toast('CREDIT_NOTE: избери издадена фактура за корекција — единствен начин по затворен период (B9)'),
+      toastUpload: () => this.toast('Multi-upload: пушти повеќе НЛБ PDF изводи — dedupe по (сметка, број) + lineHash (B13)'),
+      toastPdf: () => this.toast('Преглед на оригиналниот PDF документ (законски прилог)'),
+      toastPopis: () => this.toast('Попис: внеси физичка состојба — блокер за затворање месец ако не се совпаѓа (W8)'),
+      toastNewContractor: () => this.toast('Нов хонорарец: име, тип договор, taxMode, isTalent (актер) — B7/B8'),
+      toastZip: () => this.toast('⬇ W9 пакет: 6 папки (фактури, трошоци, изводи, благајна, хонорари, плати) — се генерира ZIP'),
+      contractors, margins, aging, plCards, settings,
+      backToClients: () => this.setState({ selectedClient: null }),
+      approveAll: () => this.setState({ approved: ['c4', 'c5'] }),
+      stop: (e) => e.stopPropagation(),
+      // wizard
+      wizardOpen: st.wizardOpen, wizardStep: st.wizardStep, wizardStepLabel: stepLabels[st.wizardStep - 1],
+      openWizard: () => this.setState({ wizardOpen: true, wizardStep: 1 }),
+      closeWizard: () => this.setState({ wizardOpen: false }),
+      wizardSteps: stepLabels.map((_, i) => ({ bg: i < st.wizardStep ? accent : '#e7ecf3' })),
+      wizardIs1: st.wizardStep === 1, wizardIs2: st.wizardStep === 2, wizardIs3: st.wizardStep === 3,
+      wizardIs4: st.wizardStep === 4, wizardIs5: st.wizardStep === 5,
+      wizardIsInvoice: isInvW,
+      setChInvoice: () => this.setState({ wizardChannel: 'INVOICE' }),
+      setChCash: () => this.setState({ wizardChannel: 'CASH' }),
+      chInvBorder: isInvW ? accent : '#e7ecf3', chCashBorder: isInvW ? '#e7ecf3' : accent,
+      wizardAmount: st.wizardAmount,
+      setAmount: (e) => this.setState({ wizardAmount: e.target.value.replace(/\D/g, '') }),
+      vatBase: this.fmt(amt), vatAmt: isInvW ? this.fmt(vat) : '0 (кеш)', vatTotal: this.fmt(amt + vat),
+      vatColor: isInvW ? '#1a2333' : '#8a97ab',
+      wizardBack: () => this.setState(s => ({ wizardStep: Math.max(1, s.wizardStep - 1) })),
+      wizardNext: () => st.wizardStep === 5 ? this.setState({ wizardOpen: false }) : this.setState(s => ({ wizardStep: s.wizardStep + 1 })),
+      wizardNextLabel: st.wizardStep === 5 ? 'Зачувај клиент ✓' : 'Продолжи →',
+      // invoice
+      invoiceOpen: st.invoiceOpen, inv,
+      closeInvoice: () => this.setState({ invoiceOpen: false }),
+      // contractors pay
+      paid: st.paid,
+      payContractor: () => this.setState({ paid: true }),
+      payLabel: st.paid ? '✓ Исплатено (кеш)' : 'Исплати од благајна',
+      payNote: st.paid ? 'AuditLog запишан · статус PAID' : 'B7: бара Contractor + документ ✓',
+      // mobile
+      mobileOpen: st.mobileOpen,
+      goMobile: () => this.setState({ mobileOpen: true, hasPhoto: false, mobSaved: false, saveTried: false }),
+      closeMobile: () => this.setState({ mobileOpen: false }),
+      takePhoto: () => this.setState({ hasPhoto: true, saveTried: false }),
+      hasPhoto: st.hasPhoto,
+      photoBorder: st.hasPhoto ? '#4caf7d' : (st.saveTried ? '#c2483f' : '#b9cff0'),
+      photoBg: st.hasPhoto ? '#e8f5ee' : (st.saveTried ? '#fdecec' : '#eef4fd'),
+      photoIcon: st.hasPhoto ? '🧾' : '📷',
+      photoText: st.hasPhoto ? 'Слика прикачена ✓' : 'Фотографирај сметка',
+      photoTextColor: st.hasPhoto ? '#2e7d55' : (st.saveTried ? '#c2483f' : '#2a5cab'),
+      photoSub: st.hasPhoto ? 'okta-smetka-1240.jpg · OCR обработено' : 'задолжително за кеш-трошок (B5)',
+      mobAmount: st.hasPhoto ? '1.240,00' : '—', mobDesc: st.hasPhoto ? 'Гориво — Окта, бензинска Аеродром' : 'ќе се пополни од OCR',
+      mobCats,
+      mobSaved: st.mobSaved,
+      saveMobile: () => canSave ? this.setState({ mobSaved: true }) : this.setState({ saveTried: true }),
+      saveBg: canSave ? accent : '#e3e9f1', saveColor: canSave ? '#fff' : '#9aa6b7',
+      saveLabel: st.mobSaved ? '✓ Зачувано атомски' : 'Зачувај трошок',
+      saveHint: st.saveTried && !canSave ? '⛔ B5: кеш-трошок без слика е блокиран' : (canSave ? 'Expense + CashLedgerEntry + слика — една трансакција' : 'прво фотографирај ја сметката'),
+      saveHintColor: st.saveTried && !canSave ? '#c2483f' : '#8a97ab'
+    };
+  }
+}
+</script>
+</body>
+</html>

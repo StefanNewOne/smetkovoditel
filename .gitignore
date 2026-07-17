@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Env / secrets
+.env
+.env.local
+.env.staging
+.env.production
+!.env.example
+
+# Build output
+.next/
+out/
+dist/
+build/
+
+# Prisma
+prisma/*.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Claude Code — personal overrides only (committed: settings.json)
+.claude/settings.local.json
+
+# Test / coverage
+coverage/
+playwright-report/
+test-results/

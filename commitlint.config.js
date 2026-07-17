@@ -1,0 +1,38 @@
+/** Conventional Commits — scopes match CLAUDE.md Category 1. */
+module.exports = {
+  extends: ["@commitlint/config-conventional"],
+  rules: {
+    "scope-enum": [
+      2,
+      "always",
+      [
+        "charges",
+        "invoices",
+        "clients",
+        "packages",
+        "cash",
+        "blagajna",
+        "import",
+        "parser",
+        "matching",
+        "meta-ads",
+        "bank",
+        "contractors",
+        "payroll",
+        "reports",
+        "close",
+        "settings",
+        "auth",
+        "worker",
+        "cron",
+        "db",
+        "infra",
+        "ci",
+        "docs",
+        "ui",
+        "pdf",
+        "shared",
+      ],
+    ],
+  },
+};

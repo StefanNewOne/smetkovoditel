@@ -1,0 +1,44 @@
+{
+  "name": "smetkovoditel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GoDigital Finance OS (Сметководител) — internal financial system for АЛМА ДИЗАЈН ДООЕЛ Скопје",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=@smetko/web",
+    "build": "npm run db:generate && npm run build --workspace=@smetko/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "db:generate": "npm run generate --workspace=@smetko/db",
+    "db:migrate": "npm run migrate --workspace=@smetko/db",
+    "db:studio": "npm run studio --workspace=@smetko/db",
+    "commit": "cz",
+    "prepare": "husky"
+  },
+  "config": {
+    "commitizen": {
+      "path": "@commitlint/cz-commitlint"
+    }
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,json,css,md}": "prettier --write"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.5.0",
+    "@commitlint/config-conventional": "^19.5.0",
+    "@commitlint/cz-commitlint": "^19.5.0",
+    "commitizen": "^4.3.1",
+    "husky": "^9.1.6",
+    "lint-staged": "^15.2.10",
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

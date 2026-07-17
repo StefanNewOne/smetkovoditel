@@ -1,0 +1,43 @@
+# Local development stack (Master Plan §11). `docker compose up` starts everything behind Nginx.
+# HTTP only locally; staging/production add TLS (see docker-compose.prod.yml + _docs/deployment).
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: smetko
+      POSTGRES_PASSWORD: smetko
+      POSTGRES_DB: smetko
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smetko"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  mailhog:
+    image: mailhog/mailhog
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # web UI
+
+  # app (Next.js) and worker are added in a follow-up once Dockerfiles exist (Phase 0 SM-7).
+  # For now, run them locally with `npm run dev` / worker `npm run dev` against these services.
+
+volumes:
+  db_data:
+  minio_data:

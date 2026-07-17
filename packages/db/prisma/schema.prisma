@@ -1,0 +1,478 @@
+// GoDigital Finance OS — Prisma schema
+// Transcribed literally from Master Plan ДЕЛ II (v2.1 FINAL). Only МКД; money is Int денари.
+// The @@unique / @unique constraints are LOAD-BEARING: they make duplicate import (B13) and
+// double-billing (B15/B16) structurally impossible. Never relax one to make a test pass.
+//
+// Deviations from the Master Plan text (documented, valid-Prisma):
+//  - The Expense <-> AdSpendReceipt 1:1 is owned by Expense.adSpendReceiptId (@unique). The
+//    Master Plan also listed AdSpendReceipt.expenseId; a single 1:1 cannot hold a unique FK on
+//    both sides, so AdSpendReceipt exposes it as the `expense` back-relation instead.
+//  - User.passwordHash added for app-managed session auth (ADR-001 A3).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ ENUMS ============
+enum PaymentChannel {
+  INVOICE
+  CASH
+}
+
+enum PayChannel {
+  BANK
+  CARD
+  CASH
+}
+
+enum ClientStatus {
+  ACTIVE
+  PAUSED
+  CHURNED
+}
+
+enum ChargeKind {
+  INVOICE
+  CASH_OBLIGATION
+  CREDIT_NOTE
+}
+
+enum ChargeStatus {
+  DRAFT
+  OPEN
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum LineType {
+  SERVICE
+  META_ADS
+  ACTORS
+  OTHER
+}
+
+enum BillingMode {
+  PASSTHROUGH_ACTUAL
+  FIXED
+}
+
+enum MatchStatus {
+  UNMATCHED
+  AUTO_MATCHED
+  MANUAL_MATCHED
+}
+
+enum Direction {
+  IN
+  OUT
+}
+
+enum CashDocType {
+  FISCAL
+  KASA_PRIMI
+  KASA_ISPLATI
+}
+
+enum ExpenseCategory {
+  OPERATIONS
+  ADS
+  ACTORS
+  EQUIPMENT
+  FUEL
+  RENT
+  UTILITIES
+  PHONE
+  BANK_FEES
+  SALARY
+  HONORAR
+  OTHER
+}
+
+enum ContractorType {
+  DOGOVOR_NA_DELO
+  CONTRACTOR_INVOICE
+}
+
+enum TaxMode {
+  WITHHOLD_10
+  NO_WITHHOLDING
+}
+
+enum PeriodStatus {
+  OPEN
+  CLOSED
+}
+
+enum ImportSource {
+  EMAIL
+  MANUAL_UPLOAD
+}
+
+enum ImportStatus {
+  PARSED
+  DUPLICATE_SKIPPED
+  FAILED
+}
+
+enum ParseStatus {
+  OK
+  PARTIAL
+  FAILED
+}
+
+// ============ CLIENTS & CHARGING ============
+model Client {
+  id              String                  @id @default(cuid())
+  name            String
+  taxId           String? // ЕДБ — required за INVOICE (app-валидација)
+  address         String?
+  contactEmail    String?
+  contactPhone    String?
+  paymentChannel  PaymentChannel
+  vatApplicable   Boolean                 @default(true)
+  paymentTermDays Int                     @default(15)
+  status          ClientStatus            @default(ACTIVE)
+  creditBalance   Int                     @default(0) // преплата → авто-примена на следен Charge (B18)
+  packages        ServicePackage[]
+  lineTemplates   RecurringLineTemplate[]
+  charges         Charge[]
+  adAccounts      AdAccount[]
+  payments        Payment[]
+  expenses        Expense[]
+  createdAt       DateTime                @default(now())
+}
+
+model ServicePackage {
+  id            String    @id @default(cuid())
+  clientId      String
+  client        Client    @relation(fields: [clientId], references: [id])
+  monthlyAmount Int // ОСНОВИЦА, МКД integer дени
+  description   String?
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  createdById   String
+  createdAt     DateTime  @default(now())
+
+  @@index([clientId])
+}
+
+model RecurringLineTemplate {
+  id          String      @id @default(cuid())
+  clientId    String
+  client      Client      @relation(fields: [clientId], references: [id])
+  type        LineType // META_ADS | ACTORS | OTHER
+  billingMode BillingMode // META_ADS и ACTORS = PASSTHROUGH_ACTUAL (D2); OTHER = FIXED
+  fixedAmount Int?
+  active      Boolean     @default(true)
+
+  @@index([clientId])
+}
+
+model Charge {
+  id              String       @id @default(cuid())
+  clientId        String
+  client          Client       @relation(fields: [clientId], references: [id])
+  kind            ChargeKind
+  period          String // "2026-08"
+  seqInMonth      Int?
+  invoiceNumber   String? // "1-2/7-2026"; null за CASH_OBLIGATION
+  issueDate       DateTime
+  dueDate         DateTime
+  status          ChargeStatus
+  subtotal        Int // МКД
+  vatAmount       Int // 0 за CASH_OBLIGATION
+  total           Int
+  paidAmount      Int          @default(0)
+  relatedChargeId String? // CREDIT_NOTE → оригинал
+  relatedCharge   Charge?      @relation("ChargeCorrection", fields: [relatedChargeId], references: [id])
+  corrections     Charge[]     @relation("ChargeCorrection")
+  lines           ChargeLine[]
+  payments        Payment[]
+  pdfUrl          String?
+
+  @@unique([clientId, period, kind])
+  @@unique([seqInMonth, period])
+}
+
+model ChargeLine {
+  id             String    @id @default(cuid())
+  chargeId       String
+  charge         Charge    @relation(fields: [chargeId], references: [id])
+  type           LineType
+  description    String
+  amount         Int
+  vatRate        Float // 0.18 или 0
+  sourceRefs     Json? // [{expenseId}] за META_ADS/ACTORS следливост
+  billedExpenses Expense[] @relation("ExpenseBilledOnLine")
+
+  @@index([chargeId])
+}
+
+model Payment {
+  id              String           @id @default(cuid())
+  clientId        String?
+  client          Client?          @relation(fields: [clientId], references: [id])
+  chargeId        String?
+  charge          Charge?          @relation(fields: [chargeId], references: [id])
+  channel         PayChannel
+  amount          Int
+  date            DateTime
+  reference       String?
+  matchStatus     MatchStatus
+  statementLineId String?          @unique
+  statementLine   StatementLine?   @relation(fields: [statementLineId], references: [id])
+  cashEntryId     String?          @unique
+  cashEntry       CashLedgerEntry? @relation(fields: [cashEntryId], references: [id])
+}
+
+// ============ CASH LEDGER (BLAGAJNA) ============
+model CashLedgerEntry {
+  id                String             @id @default(cuid())
+  direction         Direction
+  amount            Int
+  date              DateTime
+  description       String
+  counterpartyType  String // CLIENT | CONTRACTOR | VENDOR | INTERNAL
+  counterpartyId    String?
+  documentType      CashDocType
+  documentNumber    String? // број од фискалниот уред — рачен внес (D6)
+  attachmentUrl     String? // задолжителна слика за исплати (B5)
+  periodId          String
+  period            Period             @relation(fields: [periodId], references: [id])
+  createdById       String
+  createdAt         DateTime           @default(now())
+  payment           Payment?
+  expense           Expense?
+  contractorPayment ContractorPayment?
+
+  @@index([periodId])
+}
+
+// ============ EXPENSES ============
+model Expense {
+  id                  String             @id @default(cuid())
+  category            ExpenseCategory
+  vendor              String?
+  amount              Int
+  vatAmount           Int?
+  date                DateTime
+  paymentChannel      PayChannel
+  clientId            String?
+  client              Client?            @relation(fields: [clientId], references: [id])
+  isBillable          Boolean            @default(false)
+  billedOnLineId      String? // спречува двојно фактурирање (B15)
+  billedOnLine        ChargeLine?        @relation("ExpenseBilledOnLine", fields: [billedOnLineId], references: [id])
+  attachmentUrl       String?
+  statementLineId     String?            @unique
+  statementLine       StatementLine?     @relation(fields: [statementLineId], references: [id])
+  cashEntryId         String?            @unique
+  cashEntry           CashLedgerEntry?   @relation(fields: [cashEntryId], references: [id])
+  adSpendReceiptId    String?            @unique
+  adSpendReceipt      AdSpendReceipt?    @relation(fields: [adSpendReceiptId], references: [id])
+  contractorPaymentId String? // D2: актер-ставка од алокација
+  contractorPayment   ContractorPayment? @relation(fields: [contractorPaymentId], references: [id])
+  ocrRaw              Json?
+  asset               Asset?
+
+  @@index([clientId])
+  @@index([billedOnLineId])
+  @@index([contractorPaymentId])
+}
+
+model Asset {
+  id                String   @id @default(cuid())
+  name              String
+  purchaseExpenseId String   @unique
+  purchaseExpense   Expense  @relation(fields: [purchaseExpenseId], references: [id])
+  purchaseValue     Int
+  depreciationRate  Float
+  depreciationStart DateTime
+}
+
+// ============ META ADS PIPELINE ============
+model AdAccount {
+  id            String  @id @default(cuid())
+  metaAccountId String  @unique // "2396006970755280"
+  name          String
+  clientId      String? // null = сопствен маркетинг
+  client        Client? @relation(fields: [clientId], references: [id])
+  active        Boolean @default(true)
+
+  @@index([clientId])
+}
+
+model AdSpendReceipt {
+  id               String         @id @default(cuid())
+  emailMessageId   String         @unique // Gmail Message-ID — dedupe 1
+  transactionId    String         @unique // dedupe 2
+  metaInvoiceNo    String         @unique // "FBADS-..." — dedupe 3
+  referenceNumber  String         @unique // "QEC8CTD652" — MATCHING КЛУЧ
+  accountName      String
+  metaAccountId    String?
+  amountUsd        Int // центи — САМО за sanity-проверка
+  cardLast4        String
+  invoiceDate      DateTime
+  campaignsJson    Json?
+  attachmentUrl    String // оригинален PDF — законски документ
+  reverseChargeVat Boolean        @default(true)
+  parseStatus      ParseStatus
+  matchStatus      MatchStatus    @default(UNMATCHED)
+  statementLineId  String?        @unique
+  statementLine    StatementLine? @relation(fields: [statementLineId], references: [id])
+  expense          Expense? // 1:1 owned by Expense.adSpendReceiptId
+  receivedAt       DateTime
+}
+
+// ============ БАНКА ============
+model BankAccount {
+  id             String                @id @default(cuid())
+  bank           String                @default("NLB")
+  accountNumber  String                @unique // "210-0768360001-38"
+  openingBalance Int
+  openingDate    DateTime
+  imports        BankStatementImport[]
+}
+
+model BankStatementImport {
+  id              String          @id @default(cuid())
+  bankAccountId   String
+  bankAccount     BankAccount     @relation(fields: [bankAccountId], references: [id])
+  statementNumber Int
+  statementDate   DateTime
+  source          ImportSource
+  format          String          @default("NLB_PDF") // adapter pattern (D4)
+  fileRef         String
+  openingBalance  Int
+  totalDebit      Int
+  totalCredit     Int
+  closingBalance  Int
+  orderCount      Int
+  status          ImportStatus
+  lines           StatementLine[]
+
+  @@unique([bankAccountId, statementNumber])
+}
+
+model StatementLine {
+  id                  String              @id @default(cuid())
+  importId            String
+  import              BankStatementImport @relation(fields: [importId], references: [id])
+  lineHash            String              @unique
+  date                DateTime
+  amount              Int
+  direction           Direction
+  counterpartyName    String?
+  counterpartyAccount String?
+  description         String
+  reference           String?
+  bankRef             String? // "Податоци за рекламација"
+  classifiedAs        String? // META_ADS | CARD_TX | CLIENT_PAYMENT | BANK_FEE | OTHER
+  processed           Boolean             @default(false)
+  linkedType          String?
+  linkedId            String?
+  payment             Payment?
+  expense             Expense?
+  adSpendReceipt      AdSpendReceipt?
+
+  @@index([importId])
+}
+
+model VendorRule {
+  id       String          @id @default(cuid())
+  pattern  String
+  category ExpenseCategory
+  vendor   String?
+  hits     Int             @default(0)
+}
+
+model ExchangeRate {
+  id     String   @id @default(cuid())
+  date   DateTime
+  code   String   @default("USD")
+  midMkd Float
+
+  @@unique([date, code])
+}
+
+// ============ ЛУЃЕ ============
+model Contractor {
+  id           String              @id @default(cuid())
+  name         String
+  idNumber     String?
+  contractType ContractorType
+  taxMode      TaxMode // B8: NO_WITHHOLDING само со CONTRACTOR_INVOICE
+  isTalent     Boolean             @default(false) // D2: актер/on-camera — алокациите можат да се билабилни
+  defaultRate  Int?
+  contractUrl  String?
+  active       Boolean             @default(true)
+  payments     ContractorPayment[]
+}
+
+model ContractorPayment {
+  id             String           @id @default(cuid())
+  contractorId   String
+  contractor     Contractor       @relation(fields: [contractorId], references: [id])
+  period         String
+  grossAmount    Int
+  taxAmount      Int
+  netAmount      Int
+  paymentChannel PayChannel
+  cashEntryId    String?          @unique
+  cashEntry      CashLedgerEntry? @relation(fields: [cashEntryId], references: [id])
+  documentUrl    String?
+  allocations    Json // [{clientId, amount, billable}] — D2
+  status         String // CALCULATED | PAID
+  expenses       Expense[] // billable ACTORS Expenses (D2, B16)
+
+  @@index([contractorId])
+}
+
+model Employee {
+  id          String  @id @default(cuid())
+  name        String
+  grossSalary Int
+  position    String?
+}
+
+model PayrollRun {
+  id     String @id @default(cuid())
+  period String
+  items  Json
+  status String
+}
+
+// ============ СИСТЕМ ============
+model Period {
+  id          String            @id // "2026-08"
+  status      PeriodStatus      @default(OPEN)
+  closedAt    DateTime?
+  closedById  String?
+  cashEntries CashLedgerEntry[]
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  entity    String
+  entityId  String
+  action    String
+  diff      Json
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+}
+
+model User {
+  id           String @id @default(cuid())
+  name         String
+  email        String @unique
+  role         String
+  passwordHash String // app-managed session auth (ADR-001 A3)
+}

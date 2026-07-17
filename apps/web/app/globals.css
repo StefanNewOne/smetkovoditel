@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+/* Design tokens extracted from the Claude Design prototype (see _docs/design/design-tokens.md).
+   The accent tints are hardcoded (they do not recompute if --color-accent changes). */
+@theme {
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+
+  --color-bg: #f6f8fb;
+  --color-surface: #ffffff;
+  --color-inset: #f8fafc;
+  --color-chip: #f0f4f9;
+  --color-track: #eef2f7;
+
+  --color-accent: #3b76d1;
+  --color-accent-hover: #2a5cab;
+  --color-accent-50: #eef4fd;
+  --color-accent-200: #d3e0f4;
+  --color-accent-300: #b9cff0;
+
+  --color-border: #e7ecf3;
+  --color-border-2: #eef2f7;
+  --color-border-3: #f2f5f9;
+  --color-input: #dfe6ef;
+
+  --color-ink: #1a2333;
+  --color-ink-2: #3d4a5e;
+  --color-muted: #5b6878;
+  --color-muted-2: #8a97ab;
+
+  --color-success: #4caf7d;
+  --color-success-700: #2e7d55;
+  --color-success-50: #e8f5ee;
+  --color-warning: #e8a33d;
+  --color-warning-700: #a3690f;
+  --color-warning-50: #fdf4e5;
+  --color-danger: #c2483f;
+  --color-danger-50: #fdecec;
+
+  --radius-sm: 8px;
+  --radius-md: 9px;
+  --radius-lg: 11px;
+  --radius-xl: 14px;
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-fade-up {
+  animation: fadeUp 0.25s ease;
+}

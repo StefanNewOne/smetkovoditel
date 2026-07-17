@@ -45,3 +45,8 @@ test-results/
 
 # Local-only real financial fixtures (never commit — public repo)
 _fixtures/
+
+# Historical import — real client/financial data stays local; templates + README are committed
+_import/*
+!_import/*.example
+!_import/README.md

@@ -18,6 +18,8 @@
     "db:generate": "npm run generate --workspace=@smetko/db",
     "db:migrate": "npm run migrate --workspace=@smetko/db",
     "db:studio": "npm run studio --workspace=@smetko/db",
+    "db:seed": "dotenv -e .env.local -- npm run seed --workspace=@smetko/db",
+    "import:historical": "dotenv -e .env.local -- tsx scripts/import-historical.ts",
     "commit": "cz",
     "prepare": "husky"
   },

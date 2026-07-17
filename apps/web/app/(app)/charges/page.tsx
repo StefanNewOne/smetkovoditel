@@ -1,12 +1,16 @@
-import { ScreenPlaceholder } from "@/components/screen-placeholder";
+import { currentPeriod, isValidPeriod } from "@smetko/shared";
+import { getCharges } from "@/lib/charges";
+import { ChargesView } from "./charges-view";
 
-export default function ChargesPage() {
-  return (
-    <ScreenPlaceholder
-      title="Задолжувања"
-      phase="Ф1"
-      backlogId="SM-12 / SM-13 / SM-14"
-      summary="Месец-селектор, W1 задолжувања (ФАКТУРА/КЕШ ОБВ.), одобрување на DRAFT со доделување број 1-{n}/{M}-{YYYY} (B1), CREDIT_NOTE и PDF преглед."
-    />
-  );
+export default async function ChargesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ period?: string }>;
+}) {
+  const { period: raw } = await searchParams;
+  const period = raw && isValidPeriod(raw) ? raw : currentPeriod();
+  const charges = await getCharges(period);
+  const draftCount = charges.filter((c) => c.status === "DRAFT").length;
+
+  return <ChargesView period={period} charges={charges} draftCount={draftCount} />;
 }

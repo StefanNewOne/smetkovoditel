@@ -10,6 +10,7 @@ import {
 } from "@smetko/db";
 import { addDays, invoiceNumber, periodStart, VAT_RATE } from "@smetko/shared";
 import { writeAudit } from "@/lib/audit";
+import { assertPeriodOpen } from "@/lib/period-guard";
 
 interface DraftLine {
   type: LineType;
@@ -29,6 +30,7 @@ interface DraftLine {
  * Idempotent: an existing charge for (client, period, kind) is skipped (safe to re-run).
  */
 export async function generateCharges(period: string, userId: string) {
+  await assertPeriodOpen(prisma, period); // B9
   const start = periodStart(period);
   const clients = await prisma.client.findMany({
     where: { status: ClientStatus.ACTIVE },
@@ -194,6 +196,7 @@ export async function approveInvoice(
         if (charge.status !== ChargeStatus.DRAFT) {
           return { invoiceNumber: charge.invoiceNumber ?? "" };
         }
+        await assertPeriodOpen(tx, charge.period); // B9
 
         const agg = await tx.charge.aggregate({
           where: { period: charge.period, seqInMonth: { not: null } },

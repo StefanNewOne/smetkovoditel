@@ -57,8 +57,8 @@ Legend — **Type:** Feature / Modification / Bug / Anomaly / Maintenance / Test
 | SM-50 | Feature | W4 dunning (invoice reminders + OVERDUE; cash internal note) | W4              | ☐      |
 | SM-51 | Feature | VendorRules management + CARD_TX auto-categorization         | §4.2            | ☐      |
 | SM-52 | Feature | Payroll (Employee + PayrollRun)                              | W5              | ☐      |
-| SM-53 | Feature | CREDIT_NOTE / storno corrections                             | §3, B9          | ☐      |
-| SM-54 | Feature | W8 month close (blockers → CLOSED → immutable B9)            | W8, B9          | ☐      |
+| SM-53 | Feature | CREDIT_NOTE / storno corrections                             | §3, B9          | ☑      |
+| SM-54 | Feature | W8 month close (blockers → CLOSED → immutable B9)            | W8, B9          | ☑      |
 
 ## Phase 4 — Ф4 Извештаи
 

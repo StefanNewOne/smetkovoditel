@@ -14,6 +14,7 @@ import {
   withholdingTax,
 } from "@smetko/shared";
 import { writeAudit } from "@/lib/audit";
+import { assertPeriodOpen } from "@/lib/period-guard";
 
 interface Allocation {
   clientId: string;
@@ -76,6 +77,7 @@ export async function payoutHonorar(input: PayoutInput, userId: string) {
     if (channel === PayChannel.CASH) {
       if (!input.documentNumber) throw new Error("Кеш-исплата бара документ (B7).");
       await tx.period.upsert({ where: { id: period }, update: {}, create: { id: period } });
+      await assertPeriodOpen(tx, period); // B9
 
       const [inAgg, outAgg] = await Promise.all([
         tx.cashLedgerEntry.aggregate({

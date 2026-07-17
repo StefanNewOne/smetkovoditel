@@ -2,6 +2,7 @@ import "server-only";
 import { CashDocType, ChargeStatus, Direction, MatchStatus, PayChannel, prisma } from "@smetko/db";
 import { type CollectCashInput, currentPeriod } from "@smetko/shared";
 import { writeAudit } from "@/lib/audit";
+import { assertPeriodOpen } from "@/lib/period-guard";
 
 /**
  * W3 — cash collection (Master Plan §W3). Atomic: a fiscal cash receipt (CashLedgerEntry IN,
@@ -13,6 +14,7 @@ export async function collectCash(input: CollectCashInput, userId: string) {
 
   await prisma.$transaction(async (tx) => {
     await tx.period.upsert({ where: { id: period }, update: {}, create: { id: period } });
+    await assertPeriodOpen(tx, period); // B9
 
     const charge = await tx.charge.findUnique({ where: { id: input.chargeId } });
     if (!charge || charge.clientId !== input.clientId) {

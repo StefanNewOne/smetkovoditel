@@ -90,3 +90,19 @@ checkout (`docker compose up -d db` → unit + integration + E2E).
 **Test totals:** 27 unit + 60 integration + 2 E2E = **89 green**. Lint/typecheck/build pass.
 **Remaining for go-live (needs secrets/VPS, not code):** connect Gmail OAuth (SM-30 live step),
 fill `<vps-ip>`/`<url>` placeholders, install `gitleaks` binary on dev machines.
+
+## Audit fixes — 2026-07-17 (from full-system review)
+
+| ID    | Type    | Change                                                                                                                                                 | Status |
+| ----- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
+| SM-74 | Bug     | ±6% USD rate sanity now computed in `runMatching` vs НБРМ mid; out-of-band → `match.alarm` warn + `rateSanityOk` in audit. Booked MKD unchanged (§4.4) | ☑      |
+| SM-75 | Bug     | Statement continuity gate — opening == prior (N-1) closing; mismatch → FAILED, posts nothing (B14)                                                     | ☑      |
+| SM-76 | Bug     | Period guards: W2 match leaves closed-period payments unprocessed; W4 markOverdue excludes closed periods (B9)                                         | ☑      |
+| SM-77 | Bug     | Billable allocation on a non-talent contractor is rejected in `calcHonorar` (D2) — no silent cost loss                                                 | ☑      |
+| SM-78 | Feature | Import-center queue resolution: re-run matching, manual match a payment line to a charge, ignore a noise line (§9.4)                                   | ☑      |
+| SM-79 | Feature | Bulk historical importer (clients + packages + charges w/ real numbers + payments + opening balances) — IN PROGRESS                                    | ◐      |
+
+**Not bugs (verified against Master Plan, flagged by the automated review but correct):** VAT on
+ADS/ACTORS invoice lines (whole invoice is 18%-VATed — standard MK treatment); a unique
+`ContractorPayment(contractor, period)` would be wrong (multiple honorari per month are legal).
+**Cosmetic/deferred:** Dashboard KPIs and client "Маргина YTD" show "—" (marked Во изградба).

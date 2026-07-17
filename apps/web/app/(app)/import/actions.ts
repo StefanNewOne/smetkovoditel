@@ -4,7 +4,49 @@ import { revalidatePath } from "next/cache";
 import { requireWriter } from "@/lib/rbac";
 import { detectDocType, extractPdfText } from "@/lib/pdf/extract";
 import { saveAttachment } from "@/lib/storage";
-import { ingestReceipt, ingestStatement } from "@/lib/workflows/w2";
+import {
+  ignoreStatementLine,
+  ingestReceipt,
+  ingestStatement,
+  manualMatchStatementLine,
+  runMatching,
+} from "@/lib/workflows/w2";
+
+export type ResolveResult = { ok: true } | { ok: false; error: string };
+
+/** Re-run receipt↔line matching (§9.4) — pairs receipts/lines whose counterpart arrived later. */
+export async function rematchAction(): Promise<
+  { ok: true; matched: number } | { ok: false; error: string }
+> {
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  const matched = await runMatching(auth.user.id);
+  revalidatePath("/import");
+  return { ok: true, matched };
+}
+
+/** Manually match an unresolved CLIENT_PAYMENT line to a chosen open charge (period-guarded B9). */
+export async function manualMatchAction(lineId: string, chargeId: string): Promise<ResolveResult> {
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  try {
+    await manualMatchStatementLine(lineId, chargeId, auth.user.id);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Спарувањето не успеа." };
+  }
+  revalidatePath("/import");
+  revalidatePath("/charges");
+  return { ok: true };
+}
+
+/** Mark a noise statement line (fee/other) resolved without booking. */
+export async function ignoreLineAction(lineId: string): Promise<ResolveResult> {
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  await ignoreStatementLine(lineId, auth.user.id);
+  revalidatePath("/import");
+  return { ok: true };
+}
 
 export type UploadResult = { ok: true; summary: string[] } | { ok: false; error: string };
 

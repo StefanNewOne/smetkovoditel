@@ -2,9 +2,9 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Upload } from "lucide-react";
-import type { QueueItem, StatementRow } from "@/lib/import";
-import { uploadAction } from "./actions";
+import { RefreshCw, Upload } from "lucide-react";
+import type { ChargeOption, QueueItem, StatementRow } from "@/lib/import";
+import { ignoreLineAction, manualMatchAction, rematchAction, uploadAction } from "./actions";
 
 interface Queues {
   lines: QueueItem[];
@@ -13,11 +13,27 @@ interface Queues {
   partial: QueueItem[];
 }
 
-export function ImportView({ statements, queues }: { statements: StatementRow[]; queues: Queues }) {
+export function ImportView({
+  statements,
+  queues,
+  openCharges,
+}: {
+  statements: StatementRow[];
+  queues: Queues;
+  openCharges: ChargeOption[];
+}) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [pending, startTransition] = useTransition();
   const [summary, setSummary] = useState<string[]>([]);
+
+  function resolve(fn: () => Promise<{ ok: boolean; error?: string }>) {
+    startTransition(async () => {
+      const r = await fn();
+      if (!r.ok && r.error) setSummary([r.error]);
+      router.refresh();
+    });
+  }
 
   function onFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -101,7 +117,24 @@ export function ImportView({ statements, queues }: { statements: StatementRow[];
 
       {/* Right: 4 queues */}
       <div className="flex flex-col gap-4">
-        <Queue title="Извод-линии за решавање" items={queues.lines} />
+        <div className="flex items-center justify-between">
+          <h3 className="text-[14px] font-extrabold text-ink">Редици за внимание</h3>
+          <button
+            onClick={() => resolve(rematchAction)}
+            disabled={pending}
+            className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-[12px] font-semibold text-accent hover:bg-accent-50 disabled:opacity-50"
+          >
+            <RefreshCw size={13} /> Спари повторно
+          </button>
+        </div>
+        <Queue
+          title="Извод-линии за решавање"
+          items={queues.lines}
+          openCharges={openCharges}
+          pending={pending}
+          onMatch={(lineId, chargeId) => resolve(() => manualMatchAction(lineId, chargeId))}
+          onIgnore={(lineId) => resolve(() => ignoreLineAction(lineId))}
+        />
         <Queue title="Receipts без линија" items={queues.receipts} />
         <Queue title="FACEBK без receipt (аларм)" items={queues.facebk} danger />
         <Queue title="PARTIAL / FAILED" items={queues.partial} danger />
@@ -110,7 +143,23 @@ export function ImportView({ statements, queues }: { statements: StatementRow[];
   );
 }
 
-function Queue({ title, items, danger }: { title: string; items: QueueItem[]; danger?: boolean }) {
+function Queue({
+  title,
+  items,
+  danger,
+  openCharges,
+  pending,
+  onMatch,
+  onIgnore,
+}: {
+  title: string;
+  items: QueueItem[];
+  danger?: boolean;
+  openCharges?: ChargeOption[];
+  pending?: boolean;
+  onMatch?: (lineId: string, chargeId: string) => void;
+  onIgnore?: (lineId: string) => void;
+}) {
   return (
     <div className="rounded-xl border border-border bg-surface p-4">
       <div className="mb-2 flex items-center justify-between">
@@ -132,17 +181,80 @@ function Queue({ title, items, danger }: { title: string; items: QueueItem[]; da
       ) : (
         <div className="flex flex-col gap-1.5">
           {items.slice(0, 8).map((it) => (
-            <div
+            <QueueRow
               key={it.id}
-              className="flex items-center gap-2 rounded-md bg-inset px-2.5 py-1.5 text-[12px]"
-            >
-              <span className="min-w-0 flex-1 truncate text-ink">{it.title}</span>
-              {it.amount && <span className="font-semibold text-muted">{it.amount}</span>}
-              <span className="max-w-[45%] truncate text-[11px] text-muted-2">{it.context}</span>
-            </div>
+              item={it}
+              openCharges={openCharges}
+              pending={pending}
+              onMatch={onMatch}
+              onIgnore={onIgnore}
+            />
           ))}
           {items.length > 8 && (
             <p className="text-[11px] text-muted-2">+{items.length - 8} повеќе…</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function QueueRow({
+  item,
+  openCharges,
+  pending,
+  onMatch,
+  onIgnore,
+}: {
+  item: QueueItem;
+  openCharges?: ChargeOption[];
+  pending?: boolean;
+  onMatch?: (lineId: string, chargeId: string) => void;
+  onIgnore?: (lineId: string) => void;
+}) {
+  const [chargeId, setChargeId] = useState("");
+  const isClientPayment = item.classifiedAs === "CLIENT_PAYMENT";
+  const canResolve = !!onMatch; // only the statement-lines queue passes handlers
+
+  return (
+    <div className="rounded-md bg-inset px-2.5 py-1.5 text-[12px]">
+      <div className="flex items-center gap-2">
+        <span className="min-w-0 flex-1 truncate text-ink">{item.title}</span>
+        {item.amount && <span className="font-semibold text-muted">{item.amount}</span>}
+        <span className="max-w-[40%] truncate text-[11px] text-muted-2">{item.context}</span>
+      </div>
+      {canResolve && (
+        <div className="mt-1.5 flex items-center gap-1.5">
+          {isClientPayment ? (
+            <>
+              <select
+                value={chargeId}
+                onChange={(e) => setChargeId(e.target.value)}
+                className="min-w-0 flex-1 rounded border border-input bg-surface px-1.5 py-1 text-[11px]"
+              >
+                <option value="">Избери фактура…</option>
+                {(openCharges ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => chargeId && onMatch?.(item.id, chargeId)}
+                disabled={pending || !chargeId}
+                className="rounded bg-accent px-2 py-1 text-[11px] font-bold text-white disabled:opacity-40"
+              >
+                Спари
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => onIgnore?.(item.id)}
+              disabled={pending}
+              className="rounded border border-border px-2 py-1 text-[11px] font-semibold text-muted hover:bg-chip disabled:opacity-40"
+            >
+              Игнорирај
+            </button>
           )}
         </div>
       )}

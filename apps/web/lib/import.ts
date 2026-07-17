@@ -21,6 +21,12 @@ export interface QueueItem {
   title: string;
   amount: string | null;
   context: string;
+  classifiedAs?: string; // for statement-line items: CLIENT_PAYMENT lines are manually matchable
+}
+
+export interface ChargeOption {
+  id: string;
+  label: string; // "1-3/7-2026 · Client · остаток 12.000"
 }
 
 const d0 = (n: number) => formatMKD(n, { decimals: 0 });
@@ -49,6 +55,22 @@ export async function getImportCenter() {
     prisma.bankStatementImport.findMany({ where: { status: "FAILED" }, take: 50 }),
   ]);
 
+  // Open charges offered as manual-match targets for unresolved CLIENT_PAYMENT lines (§9.4).
+  const open = await prisma.charge.findMany({
+    where: {
+      kind: "INVOICE",
+      invoiceNumber: { not: null },
+      status: { in: ["OPEN", "PARTIALLY_PAID", "OVERDUE"] },
+    },
+    include: { client: { select: { name: true } } },
+    orderBy: { seqInMonth: "desc" },
+    take: 100,
+  });
+  const openCharges: ChargeOption[] = open.map((c) => ({
+    id: c.id,
+    label: `${c.invoiceNumber} · ${c.client.name} · остаток ${d0(c.total - c.paidAmount)}`,
+  }));
+
   const statementRows: StatementRow[] = statements.map((s) => ({
     id: s.id,
     statementNumber: s.statementNumber,
@@ -68,6 +90,7 @@ export async function getImportCenter() {
     title: l.description || l.classifiedAs || "Извод-линија",
     amount: `${l.direction === "IN" ? "+" : "−"}${d0(l.amount)}`,
     context: `${l.classifiedAs ?? "?"} · ${l.reference ?? l.counterpartyAccount ?? ""}`,
+    classifiedAs: l.classifiedAs ?? undefined,
   }));
   const receipts: QueueItem[] = qReceipts.map((r) => ({
     id: r.id,
@@ -96,5 +119,5 @@ export async function getImportCenter() {
     })),
   ];
 
-  return { statements: statementRows, queues: { lines, receipts, facebk, partial } };
+  return { statements: statementRows, queues: { lines, receipts, facebk, partial }, openCharges };
 }

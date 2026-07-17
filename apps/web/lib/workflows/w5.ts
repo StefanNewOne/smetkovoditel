@@ -27,6 +27,13 @@ export async function calcHonorar(input: CalcHonorarInput, userId: string) {
   const contractor = await prisma.contractor.findUnique({ where: { id: input.contractorId } });
   if (!contractor) throw new Error("Хонорарецот не постои.");
 
+  // D2/B16: only talent contractors' allocations may be billable. A billable allocation on a
+  // non-talent contractor would create a cost that is never expensed/billed — reject it, don't
+  // silently drop it.
+  if (!contractor.isTalent && input.allocations.some((a) => a.billable)) {
+    throw new Error("Само актери (isTalent) можат да имаат билабилни алокации (D2).");
+  }
+
   const taxAmount = withholdingTax(input.grossAmount, contractor.taxMode);
   const netAmount = input.grossAmount - taxAmount;
 

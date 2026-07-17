@@ -8,8 +8,15 @@ import {
   PayChannel,
   prisma,
 } from "@smetko/db";
+import pino from "pino";
 import { normalizeInvoiceRef, parseMetaReceipt, parseNlbStatement } from "@smetko/shared";
 import { writeAudit } from "@/lib/audit";
+import { assertPeriodOpen } from "@/lib/period-guard";
+
+const log = pino({ level: process.env.LOG_LEVEL ?? "info" });
+
+/** USD/MKD rate sanity band for Meta matching (§4.4). Booking always uses the statement MKD. */
+const RATE_SANITY_BAND = 0.06;
 
 const OPEN_STATUSES: ChargeStatus[] = [
   ChargeStatus.OPEN,
@@ -76,6 +83,40 @@ export async function ingestStatement(
   if (dup) return { status: "DUPLICATE_SKIPPED", statementNumber: parsed.statementNumber };
 
   const statementDate = parseMkDate(parsed.statementDate);
+
+  // B14 — continuity gate: the immediate predecessor statement's closing balance must equal this
+  // statement's opening balance. Only checked when the exact predecessor (N-1) exists, so a
+  // legitimately missing intermediate statement does not cause a false failure.
+  const predecessor = await prisma.bankStatementImport.findFirst({
+    where: {
+      bankAccountId: bankAccount.id,
+      statementNumber: parsed.statementNumber - 1,
+      status: "PARSED",
+    },
+  });
+  if (predecessor && predecessor.closingBalance !== parsed.prevBalance) {
+    await prisma.bankStatementImport.create({
+      data: {
+        bankAccountId: bankAccount.id,
+        statementNumber: parsed.statementNumber,
+        statementDate,
+        source,
+        fileRef,
+        openingBalance: parsed.prevBalance,
+        totalDebit: parsed.totalDebit,
+        totalCredit: parsed.totalCredit,
+        closingBalance: parsed.newBalance,
+        orderCount: parsed.orderCount ?? 0,
+        status: "FAILED",
+      },
+    });
+    const msg = `Континуитет: отворено ${parsed.prevBalance} ≠ претходно затворено ${predecessor.closingBalance} (извод ${predecessor.statementNumber})`;
+    log.error(
+      { event: "statement.integrity.failed", statementNumber: parsed.statementNumber },
+      msg,
+    );
+    return { status: "FAILED", statementNumber: parsed.statementNumber, messages: [msg] };
+  }
 
   // B14 — integrity gate: on failure record the import as FAILED and post nothing.
   if (!parsed.integrity.ok) {
@@ -146,7 +187,17 @@ export async function ingestStatement(
       if (line.classifiedAs === "CLIENT_PAYMENT" && line.reference) {
         const norm = normalizeInvoiceRef(line.reference);
         const match = openCharges.find((c) => normalizeInvoiceRef(c.invoiceNumber!) === norm);
-        if (match) {
+        const chargePeriod = match
+          ? await tx.period.findUnique({ where: { id: match.period } })
+          : null;
+        if (match && chargePeriod?.status === "CLOSED") {
+          // Late payment on a closed-period invoice — never mutate posted history (B9). Leave the
+          // line unprocessed for manual handling (credit note / manual match) in the open period.
+          log.warn(
+            { event: "match.alarm", statementNumber: parsed.statementNumber, period: match.period },
+            "уплата за фактура во затворен период — оставена нерешена",
+          );
+        } else if (match) {
           const remaining = match.total - match.paidAmount;
           const applied = Math.min(line.amount, Math.max(remaining, 0));
           const overpay = line.amount - applied;
@@ -288,6 +339,31 @@ export async function runMatching(userId: string): Promise<number> {
     });
     if (!line) continue;
 
+    // §4.4 rate sanity: the booked MKD (always the statement amount, D3) vs USD × НБРМ mid.
+    // Outside ±6% → alarm for manual confirm; the booked amount itself is never affected.
+    let rateSanityOk = true;
+    if (r.amountUsd > 0) {
+      const rate = await prisma.exchangeRate.findFirst({
+        where: { code: "USD", date: { lte: line.date } },
+        orderBy: { date: "desc" },
+      });
+      if (rate && rate.midMkd > 0) {
+        const impliedRate = line.amount / r.amountUsd; // MKD per USD (the ×100 units cancel)
+        rateSanityOk = Math.abs(impliedRate - rate.midMkd) / rate.midMkd <= RATE_SANITY_BAND;
+        if (!rateSanityOk) {
+          log.warn(
+            {
+              event: "match.alarm",
+              referenceNumber: r.referenceNumber,
+              impliedRate,
+              mid: rate.midMkd,
+            },
+            "USD/MKD курс надвор од ±6% — потребна рачна потврда",
+          );
+        }
+      }
+    }
+
     await prisma.$transaction(async (tx) => {
       const adAccount = r.metaAccountId
         ? await tx.adAccount.findUnique({ where: { metaAccountId: r.metaAccountId } })
@@ -325,11 +401,91 @@ export async function runMatching(userId: string): Promise<number> {
         entity: "AdSpendReceipt",
         entityId: r.id,
         action: "match.auto",
-        diff: { referenceNumber: r.referenceNumber, amountMkd: line.amount, clientId },
+        diff: {
+          referenceNumber: r.referenceNumber,
+          amountMkd: line.amount,
+          clientId,
+          rateSanityOk,
+        },
         userId,
       });
     });
     matched++;
   }
   return matched;
+}
+
+/**
+ * Manual resolution of an unprocessed CLIENT_PAYMENT statement line against a chosen open charge
+ * (§9.4 import queue). Applies the bank payment, updates the charge, routes overpayment to credit
+ * (B18). Period-guarded (B9) and idempotent (a processed line is rejected).
+ */
+export async function manualMatchStatementLine(lineId: string, chargeId: string, userId: string) {
+  await prisma.$transaction(async (tx) => {
+    const line = await tx.statementLine.findUnique({ where: { id: lineId } });
+    if (!line || line.processed) throw new Error("Линијата не постои или е веќе решена.");
+    const charge = await tx.charge.findUnique({ where: { id: chargeId } });
+    if (!charge) throw new Error("Задолжувањето не постои.");
+    await assertPeriodOpen(tx, charge.period); // B9
+
+    const remaining = charge.total - charge.paidAmount;
+    const applied = Math.min(line.amount, Math.max(remaining, 0));
+    const overpay = line.amount - applied;
+    await tx.payment.create({
+      data: {
+        clientId: charge.clientId,
+        chargeId: charge.id,
+        channel: PayChannel.BANK,
+        amount: applied,
+        date: line.date,
+        reference: line.reference,
+        matchStatus: MatchStatus.MANUAL_MATCHED,
+        statementLineId: line.id,
+      },
+    });
+    const newPaid = charge.paidAmount + applied;
+    await tx.charge.update({
+      where: { id: charge.id },
+      data: {
+        paidAmount: newPaid,
+        status: newPaid >= charge.total ? ChargeStatus.PAID : ChargeStatus.PARTIALLY_PAID,
+      },
+    });
+    if (overpay > 0) {
+      await tx.client.update({
+        where: { id: charge.clientId },
+        data: { creditBalance: { increment: overpay } },
+      });
+    }
+    await tx.statementLine.update({
+      where: { id: line.id },
+      data: { processed: true, linkedType: "Charge", linkedId: charge.id },
+    });
+    await writeAudit(tx, {
+      entity: "StatementLine",
+      entityId: line.id,
+      action: "match.manual",
+      diff: { chargeId, applied },
+      userId,
+    });
+  });
+}
+
+/** Mark a noise statement line (BANK_FEE / OTHER / uncategorized CARD_TX) resolved without booking. */
+export async function ignoreStatementLine(lineId: string, userId: string) {
+  await prisma.$transaction(async (tx) => {
+    const line = await tx.statementLine.findUnique({ where: { id: lineId } });
+    if (!line || line.processed) return;
+    await tx.statementLine.update({
+      where: { id: line.id },
+      data: { processed: true, linkedType: "Ignored" },
+    });
+    await writeAudit(tx, {
+      entity: "StatementLine",
+      entityId: line.id,
+      action: "line.ignored",
+      diff: { amount: line.amount, classifiedAs: line.classifiedAs },
+      userId,
+    });
+  });
 }

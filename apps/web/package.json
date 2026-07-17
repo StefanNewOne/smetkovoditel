@@ -15,11 +15,13 @@
     "@smetko/shared": "*",
     "bcryptjs": "^2.4.3",
     "iron-session": "^8.0.3",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.454.0",
     "next": "^15.1.0",
     "pdf-parse": "^1.1.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "xlsx": "^0.18.5",
     "zod": "^3.23.8"
   },
   "devDependencies": {

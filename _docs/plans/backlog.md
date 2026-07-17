@@ -24,8 +24,8 @@ Legend — **Type:** Feature / Modification / Bug / Anomaly / Maintenance / Test
 
 | ID    | Type    | Title                                                                        | Master Plan ref | Status |
 | ----- | ------- | ---------------------------------------------------------------------------- | --------------- | ------ |
-| SM-10 | Feature | Clients list + 5-step onboarding wizard (VAT preview, ЕДБ gate B17)          | §9.2            | ☐      |
-| SM-11 | Feature | Versioned service packages (B4) + client profile (history, margin, timeline) | §3, B4          | ☐      |
+| SM-10 | Feature | Clients list + 5-step onboarding wizard (VAT preview, ЕДБ gate B17)          | §9.2            | ☑      |
+| SM-11 | Feature | Versioned service packages (B4) + client profile (history, margin, timeline) | §3, B4          | ☑      |
 | SM-12 | Feature | W1 charge generation (INVOICE/CASH_OBLIGATION, creditBalance apply)          | W1, B12, B18    | ☐      |
 | SM-13 | Feature | Invoice numbering `1-{n}/{M}-{YYYY}` atomic at issuance (B1)                 | §6, B1          | ☐      |
 | SM-14 | Feature | Charges screen (approve-all, CREDIT_NOTE, PDF preview)                       | §9.3            | ☐      |

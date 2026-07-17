@@ -44,9 +44,9 @@ Legend — **Type:** Feature / Modification / Bug / Anomaly / Maintenance / Test
 | SM-31 | Feature      | NLB PDF parser + integrity gate (B14) + dedupe (B13)                                                                                     | §4.2, B13/B14   | ☑      |
 | SM-32 | Feature      | Statement line classification (priority pipeline)                                                                                        | §4.2            | ☑      |
 | SM-33 | Feature      | Meta receipt parser (Cyrillic, referenceNumber key)                                                                                      | §4.3            | ☑      |
-| SM-34 | Feature      | Matching receipt ↔ statement line (±6% sanity, MKD 1:1, auto Expense)                                                                    | §4.4            | ☐      |
-| SM-35 | Feature      | Import center screen (integrity line + 4 live queues)                                                                                    | §9.4            | ☐      |
-| SM-36 | Modification | Wire billable ADS/ACTORS pass-through into W1 (billedOnLineId B15)                                                                       | §5, B15         | ☐      |
+| SM-34 | Feature      | Matching receipt ↔ statement line (±6% sanity, MKD 1:1, auto Expense)                                                                    | §4.4            | ☑      |
+| SM-35 | Feature      | Import center screen (integrity line + 4 live queues)                                                                                    | §9.4            | ☑      |
+| SM-36 | Modification | Wire billable ADS/ACTORS pass-through into W1 (billedOnLineId B15)                                                                       | §5, B15         | ☑      |
 | SM-37 | Feature      | W7 exchange-rate cron (НБРМ USD mid, fallback)                                                                                           | W7              | ☐      |
 | SM-38 | Testing      | Golden verified LIVE vs real 146/149 + 3 Meta receipts (19/19: T1/T2/T4/T5/T6/T8); synthetic unit tests committed; matching (T7) → SM-34 | §13, T1–T8      | ◐      |
 

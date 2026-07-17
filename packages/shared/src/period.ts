@@ -27,6 +27,15 @@ export function isValidPeriod(period: string): boolean {
   return /^\d{4}-\d{2}$/.test(period);
 }
 
+/**
+ * Normalize an invoice reference for payment matching (§6, §4.2): drop the month and any spaces
+ * so a bank повикување "1-66/2026" matches our invoice number "1-66/7-2026" → both "1-66/2026".
+ */
+export function normalizeInvoiceRef(ref: string): string {
+  const m = ref.replace(/\s/g, "").match(/^(\d+-\d+)\/(?:\d{1,2}-)?(\d{4})$/);
+  return m ? `${m[1]}/${m[2]}` : ref.replace(/\s/g, "");
+}
+
 export function addDays(date: Date, days: number): Date {
   const d = new Date(date);
   d.setDate(d.getDate() + days);

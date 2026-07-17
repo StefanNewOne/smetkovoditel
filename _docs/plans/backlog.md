@@ -85,6 +85,7 @@ checkout (`docker compose up -d db` → unit + integration + E2E).
 | SM-3  | web + worker Dockerfiles (multi-stage, non-root)                                                                                         | ☑      |
 | SM-7  | `docker-compose.prod.yml`, full `deploy.sh` (backup→migrate→health→rollback), Nginx/Certbot + staging/production runbooks, `/api/health` | ☑      |
 | —     | Playwright E2E (login → dashboard) against a seeded `smetko_e2e` DB                                                                      | ☑      |
+| SM-73 | `npm run dev` loads the root `.env.local` via `dotenv-cli` (was: `next dev` ran from `apps/web` and never saw the root env)              | ☑      |
 
 **Test totals:** 27 unit + 60 integration + 2 E2E = **89 green**. Lint/typecheck/build pass.
 **Remaining for go-live (needs secrets/VPS, not code):** connect Gmail OAuth (SM-30 live step),

@@ -5,10 +5,10 @@ import {
   ClientStatus,
   ExpenseCategory,
   LineType,
-  type Prisma,
+  Prisma,
   prisma,
 } from "@smetko/db";
-import { addDays, periodStart, VAT_RATE } from "@smetko/shared";
+import { addDays, invoiceNumber, periodStart, VAT_RATE } from "@smetko/shared";
 import { writeAudit } from "@/lib/audit";
 
 interface DraftLine {
@@ -174,4 +174,68 @@ export async function generateCharges(period: string, userId: string) {
   }
 
   return { created, skipped };
+}
+
+/**
+ * Approve a DRAFT invoice → OPEN, assigning the next global monthly number `1-{n}/{M}-{YYYY}`
+ * atomically (B1: no gaps, at issuance), retrying on the seqInMonth unique race. Applies any
+ * creditBalance (B18). Idempotent for an already-approved charge. Throws on error.
+ */
+export async function approveInvoice(
+  chargeId: string,
+  userId: string,
+): Promise<{ invoiceNumber: string }> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const charge = await tx.charge.findUnique({ where: { id: chargeId } });
+        if (!charge) throw new Error("Задолжувањето не постои.");
+        if (charge.kind !== ChargeKind.INVOICE) throw new Error("Само фактури добиваат број.");
+        if (charge.status !== ChargeStatus.DRAFT) {
+          return { invoiceNumber: charge.invoiceNumber ?? "" };
+        }
+
+        const agg = await tx.charge.aggregate({
+          where: { period: charge.period, seqInMonth: { not: null } },
+          _max: { seqInMonth: true },
+        });
+        const seq = (agg._max.seqInMonth ?? 0) + 1;
+        const number = invoiceNumber(seq, charge.period);
+
+        let paidAmount = charge.paidAmount;
+        const client = await tx.client.findUnique({ where: { id: charge.clientId } });
+        if (client && client.creditBalance > 0 && charge.total > paidAmount) {
+          const applied = Math.min(client.creditBalance, charge.total - paidAmount);
+          paidAmount += applied;
+          await tx.client.update({
+            where: { id: client.id },
+            data: { creditBalance: { decrement: applied } },
+          });
+        }
+        const status =
+          paidAmount >= charge.total
+            ? ChargeStatus.PAID
+            : paidAmount > 0
+              ? ChargeStatus.PARTIALLY_PAID
+              : ChargeStatus.OPEN;
+
+        await tx.charge.update({
+          where: { id: chargeId },
+          data: { seqInMonth: seq, invoiceNumber: number, status, paidAmount },
+        });
+        await writeAudit(tx, {
+          entity: "Charge",
+          entityId: chargeId,
+          action: "approve",
+          diff: { invoiceNumber: number, seqInMonth: seq },
+          userId,
+        });
+        return { invoiceNumber: number };
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") continue;
+      throw e;
+    }
+  }
+  throw new Error("Нумерацијата не успеа по повеќе обиди.");
 }

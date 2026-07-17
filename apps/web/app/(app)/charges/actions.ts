@@ -1,11 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { ChargeKind, ChargeStatus, Prisma, prisma } from "@smetko/db";
-import { invoiceNumber, isValidPeriod } from "@smetko/shared";
+import { ChargeKind, ChargeStatus, prisma } from "@smetko/db";
+import { isValidPeriod } from "@smetko/shared";
 import { currentUser } from "@/lib/auth";
-import { writeAudit } from "@/lib/audit";
-import { generateCharges } from "@/lib/workflows/w1";
+import { approveInvoice, generateCharges } from "@/lib/workflows/w1";
 
 export type W1Result =
   { ok: true; created: number; skipped: number } | { ok: false; error: string };
@@ -22,73 +21,17 @@ export async function runW1(period: string): Promise<W1Result> {
   return { ok: true, created, skipped };
 }
 
-/**
- * Approve a DRAFT invoice → OPEN, assigning the next global monthly number `1-{n}/{M}-{YYYY}`
- * atomically (B1: no gaps, assigned at issuance). Retries on the seqInMonth unique race.
- * Applies any creditBalance (B18). Idempotent for an already-approved charge.
- */
+/** Approve a DRAFT invoice → assign its number (B1). */
 export async function approveCharge(chargeId: string): Promise<ApproveResult> {
   const user = await currentUser();
   if (!user) return { ok: false, error: "Не сте најавени." };
-
-  for (let attempt = 0; attempt < 5; attempt++) {
-    try {
-      const result = await prisma.$transaction(async (tx): Promise<ApproveResult> => {
-        const charge = await tx.charge.findUnique({ where: { id: chargeId } });
-        if (!charge) return { ok: false, error: "Задолжувањето не постои." };
-        if (charge.kind !== ChargeKind.INVOICE)
-          return { ok: false, error: "Само фактури добиваат број." };
-        if (charge.status !== ChargeStatus.DRAFT) {
-          return { ok: true, invoiceNumber: charge.invoiceNumber ?? "" };
-        }
-
-        const agg = await tx.charge.aggregate({
-          where: { period: charge.period, seqInMonth: { not: null } },
-          _max: { seqInMonth: true },
-        });
-        const seq = (agg._max.seqInMonth ?? 0) + 1;
-        const number = invoiceNumber(seq, charge.period);
-
-        let paidAmount = charge.paidAmount;
-        const client = await tx.client.findUnique({ where: { id: charge.clientId } });
-        if (client && client.creditBalance > 0 && charge.total > paidAmount) {
-          const applied = Math.min(client.creditBalance, charge.total - paidAmount);
-          paidAmount += applied;
-          await tx.client.update({
-            where: { id: client.id },
-            data: { creditBalance: { decrement: applied } },
-          });
-        }
-        const status =
-          paidAmount >= charge.total
-            ? ChargeStatus.PAID
-            : paidAmount > 0
-              ? ChargeStatus.PARTIALLY_PAID
-              : ChargeStatus.OPEN;
-
-        await tx.charge.update({
-          where: { id: chargeId },
-          data: { seqInMonth: seq, invoiceNumber: number, status, paidAmount },
-        });
-        await writeAudit(tx, {
-          entity: "Charge",
-          entityId: chargeId,
-          action: "approve",
-          diff: { invoiceNumber: number, seqInMonth: seq },
-          userId: user.id,
-        });
-        return { ok: true, invoiceNumber: number };
-      });
-
-      revalidatePath("/charges");
-      return result;
-    } catch (e) {
-      // seqInMonth unique race — another approval took this number. Retry.
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") continue;
-      throw e;
-    }
+  try {
+    const { invoiceNumber } = await approveInvoice(chargeId, user.id);
+    revalidatePath("/charges");
+    return { ok: true, invoiceNumber };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Нумерацијата не успеа." };
   }
-  return { ok: false, error: "Нумерацијата не успеа по повеќе обиди." };
 }
 
 /** Approve all DRAFT invoices for the period (sequential to keep numbering gap-free). */

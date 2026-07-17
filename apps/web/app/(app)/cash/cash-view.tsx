@@ -59,7 +59,7 @@ export function CashView({
         </button>
         <div className="ml-auto flex items-center gap-2">
           <button
-            onClick={() => setMsg("Мобилен кеш-трошок (W6) — SM-17, следен чекор.")}
+            onClick={() => router.push("/expense")}
             className="flex items-center gap-1.5 rounded-md border border-accent-200 px-3.5 py-2 text-[12px] font-bold text-accent hover:bg-accent-50"
           >
             <Camera size={14} /> Кеш-трошок (мобилен)

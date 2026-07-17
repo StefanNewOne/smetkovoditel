@@ -11,7 +11,8 @@ const nextConfig: NextConfig = {
     "/charges/[id]/invoice": ["./assets/fonts/**/*"],
   },
   experimental: {
-    serverActions: { bodySizeLimit: "4mb" },
+    // Room for a camera photo upload in the W6 cash-expense action.
+    serverActions: { bodySizeLimit: "8mb" },
   },
 };
 

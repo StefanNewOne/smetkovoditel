@@ -92,6 +92,29 @@ export const zPayout = z.object({
 });
 export type PayoutInput = z.infer<typeof zPayout>;
 
+// ── Mobile cash expense (W6) ─────────────────────────────────────────────────
+/** Cash-expense categories offered in the mobile form (subset of ExpenseCategory). */
+export const zCashExpenseCategory = z.enum([
+  "OPERATIONS",
+  "FUEL",
+  "EQUIPMENT",
+  "PHONE",
+  "UTILITIES",
+  "RENT",
+  "OTHER",
+]);
+export type CashExpenseCategory = z.infer<typeof zCashExpenseCategory>;
+
+/** W6 cash expense fields (the photo is handled separately as a File — mandatory, B5). */
+export const zCashExpense = z.object({
+  amount: z.number().int().positive(), // дени
+  category: zCashExpenseCategory,
+  description: z.string().trim().min(1, "Внеси опис"),
+  vendor: z.string().trim().optional(),
+  receiptNumber: z.string().trim().optional(),
+});
+export type CashExpenseInput = z.infer<typeof zCashExpense>;
+
 /** A new versioned service-package amount (B4 — never edit, always a new version). */
 export const zChangePackage = z.object({
   clientId: z.string().min(1),

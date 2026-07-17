@@ -42,3 +42,6 @@ apps/web/uploads/
 coverage/
 playwright-report/
 test-results/
+
+# Local-only real financial fixtures (never commit — public repo)
+_fixtures/

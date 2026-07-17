@@ -35,6 +35,15 @@ export const zCreateClient = z
 
 export type CreateClientInput = z.infer<typeof zCreateClient>;
 
+/** W3 cash collection: a cash receipt against an open charge (D6 fiscal number required). */
+export const zCollectCash = z.object({
+  clientId: z.string().min(1),
+  chargeId: z.string().min(1),
+  amount: z.number().int().positive(), // дени received in cash
+  fiscalNumber: z.string().trim().min(1, "Внеси број од фискалниот уред (D6)"),
+});
+export type CollectCashInput = z.infer<typeof zCollectCash>;
+
 /** A new versioned service-package amount (B4 — never edit, always a new version). */
 export const zChangePackage = z.object({
   clientId: z.string().min(1),

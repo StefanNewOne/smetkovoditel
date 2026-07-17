@@ -30,10 +30,10 @@ Legend — **Type:** Feature / Modification / Bug / Anomaly / Maintenance / Test
 | SM-13 | Feature | Invoice numbering `1-{n}/{M}-{YYYY}` atomic at issuance (B1)                                | §6, B1          | ☑      |
 | SM-14 | Feature | Charges screen (month nav, run W1, approve-all + per-row, PDF preview). CREDIT_NOTE → SM-53 | §9.3            | ☑      |
 | SM-15 | Feature | Invoice PDF template with Cyrillic font (§7, D1) — @react-pdf, Manrope embedded             | §7, D1          | ☑      |
-| SM-16 | Feature | W3 cash collection (atomic Payment + CashLedgerEntry, FISCAL D6)                            | W3              | ☐      |
+| SM-16 | Feature | W3 cash collection (atomic Payment + CashLedgerEntry, FISCAL D6)                            | W3              | ☑      |
 | SM-17 | Feature | W6 mobile cash-expense PWA (OCR prefill, photo gate B5)                                     | W6, B5          | ☐      |
 | SM-18 | Feature | W5 contractors/honorari + D2 auto ACTORS Expense (B16)                                      | W5, D2, B16     | ☐      |
-| SM-19 | Feature | Blagajna screen (journal, stocktake, never-negative B3)                                     | §9.5, B3        | ☐      |
+| SM-19 | Feature | Blagajna screen (journal, stocktake, never-negative B3)                                     | §9.5, B3        | ☑      |
 | SM-20 | Testing | Acceptance T9–T14 (charges, cash gate, honorari pass-through)                               | T9–T14          | ☐      |
 
 ## Phase 2 — Ф2 Import

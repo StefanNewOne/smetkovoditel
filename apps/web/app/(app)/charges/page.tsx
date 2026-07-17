@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { currentPeriod, isValidPeriod } from "@smetko/shared";
 import { getCharges } from "@/lib/charges";
 import { ChargesView } from "./charges-view";

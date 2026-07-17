@@ -115,6 +115,14 @@ export const zCashExpense = z.object({
 });
 export type CashExpenseInput = z.infer<typeof zCashExpense>;
 
+/** Register a salaried employee (плата). grossSalary in дени. */
+export const zCreateEmployee = z.object({
+  name: z.string().trim().min(1, "Внеси име"),
+  grossSalary: z.number().int().positive(),
+  position: z.string().trim().optional(),
+});
+export type CreateEmployeeInput = z.infer<typeof zCreateEmployee>;
+
 /** A new versioned service-package amount (B4 — never edit, always a new version). */
 export const zChangePackage = z.object({
   clientId: z.string().min(1),

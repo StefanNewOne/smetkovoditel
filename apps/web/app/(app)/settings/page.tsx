@@ -1,12 +1,9 @@
-import { ScreenPlaceholder } from "@/components/screen-placeholder";
+export const dynamic = "force-dynamic";
 
-export default function SettingsPage() {
-  return (
-    <ScreenPlaceholder
-      title="Подесувања"
-      phase="Ф1–Ф3"
-      backlogId="SM-51 и др."
-      summary="ДДВ и законски параметри (B11), банка и салда, Ad акаунти, Vendor правила, RBAC, и нумерација на фактури (следен слободен број)."
-    />
-  );
+import { getSettingsData } from "@/lib/settings";
+import { SettingsView } from "./settings-view";
+
+export default async function SettingsPage() {
+  const { period, employees, runs, config } = await getSettingsData();
+  return <SettingsView period={period} employees={employees} runs={runs} config={config} />;
 }

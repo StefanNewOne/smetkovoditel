@@ -56,7 +56,7 @@ Legend — **Type:** Feature / Modification / Bug / Anomaly / Maintenance / Test
 | ----- | ------- | -------------------------------------------------------------------------- | --------------- | ------ |
 | SM-50 | Feature | W4 OVERDUE marking (done+verified) + cron; email reminders → SM-30 (Gmail) | W4              | ◐      |
 | SM-51 | Feature | VendorRules management + CARD_TX auto-categorization                       | §4.2            | ☑      |
-| SM-52 | Feature | Payroll (Employee + PayrollRun)                                            | W5              | ☐      |
+| SM-52 | Feature | Payroll (Employee + PayrollRun)                                            | W5              | ☑      |
 | SM-53 | Feature | CREDIT_NOTE / storno corrections                                           | §3, B9          | ☑      |
 | SM-54 | Feature | W8 month close (blockers → CLOSED → immutable B9)                          | W8, B9          | ☑      |
 
@@ -64,6 +64,6 @@ Legend — **Type:** Feature / Modification / Bug / Anomaly / Maintenance / Test
 
 | ID    | Type    | Title                                                      | Master Plan ref | Status |
 | ----- | ------- | ---------------------------------------------------------- | --------------- | ------ |
-| SM-70 | Feature | Reports (P&L, margin per client, aging, cash flow)         | §9.7            | ☐      |
-| SM-71 | Feature | W9 accountant ZIP package (6 sections, xlsx exports)       | W9              | ☐      |
-| SM-72 | Testing | End-to-end verification + margin cross-check for 3 clients | §10 Ф4          | ☐      |
+| SM-70 | Feature | Reports (P&L, margin per client, aging, cash flow)         | §9.7            | ☑      |
+| SM-71 | Feature | W9 accountant ZIP package (6 sections, xlsx exports)       | W9              | ☑      |
+| SM-72 | Testing | End-to-end verification + margin cross-check for 3 clients | §10 Ф4          | ☑      |

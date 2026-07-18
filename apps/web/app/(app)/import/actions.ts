@@ -7,7 +7,7 @@ import { saveAttachment } from "@/lib/storage";
 import {
   ignoreStatementLine,
   ingestReceipt,
-  ingestStatement,
+  ingestStatementPdf,
   manualMatchStatementLine,
   runMatching,
 } from "@/lib/workflows/w2";
@@ -78,7 +78,7 @@ export async function uploadAction(formData: FormData): Promise<UploadResult> {
               : `Meta: ${r.message}`,
         );
       } else if (type === "NLB") {
-        const r = await ingestStatement(text, url, "MANUAL_UPLOAD", user.id);
+        const r = await ingestStatementPdf(bytes, url, "MANUAL_UPLOAD", user.id);
         summary.push(
           r.status === "PARSED"
             ? `Извод ${r.statementNumber}: ${r.lines} линии · уплати ${r.clientMatched} · Meta ${r.receiptsMatched}`

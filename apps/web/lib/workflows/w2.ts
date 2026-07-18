@@ -9,8 +9,14 @@ import {
   prisma,
 } from "@smetko/db";
 import pino from "pino";
-import { normalizeInvoiceRef, parseMetaReceipt, parseNlbStatement } from "@smetko/shared";
+import {
+  type NlbStatement,
+  normalizeInvoiceRef,
+  parseMetaReceipt,
+  parseNlbStatement,
+} from "@smetko/shared";
 import { writeAudit } from "@/lib/audit";
+import { parseNlbFromPdf } from "@/lib/pdf/nlb-parse";
 import { assertPeriodOpen } from "@/lib/period-guard";
 
 const log = pino({ level: process.env.LOG_LEVEL ?? "info" });
@@ -46,13 +52,32 @@ export type StatementIngest =
  * W2 — ingest an NLB statement (Master Plan §4.2): dedupe (B13) → integrity gate (B14) →
  * persist lines + classify → auto-book CLIENT_PAYMENT to charges; META_ADS lines await matching.
  */
+/** Ingest from a PDF buffer using the column-aware positional parser (real statements). */
+export async function ingestStatementPdf(
+  buffer: Buffer,
+  fileRef: string,
+  source: ImportSource,
+  userId: string,
+): Promise<StatementIngest> {
+  return ingestParsedStatement(await parseNlbFromPdf(buffer), fileRef, source, userId);
+}
+
+/** Ingest from extracted text (golden/redacted fixtures + tests; direction from classification). */
 export async function ingestStatement(
   text: string,
   fileRef: string,
   source: ImportSource,
   userId: string,
 ): Promise<StatementIngest> {
-  const parsed = parseNlbStatement(text);
+  return ingestParsedStatement(parseNlbStatement(text), fileRef, source, userId);
+}
+
+async function ingestParsedStatement(
+  parsed: NlbStatement,
+  fileRef: string,
+  source: ImportSource,
+  userId: string,
+): Promise<StatementIngest> {
   if (parsed.statementNumber == null) {
     return {
       status: "FAILED",

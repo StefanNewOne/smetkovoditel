@@ -48,38 +48,59 @@ const pdfParseWithRender = pdfParse as unknown as (
 
 async function positioned(buf: Buffer): Promise<Tok[]> {
   const toks: Tok[] = [];
+  // pdf.js Y-coordinates reset per page; offset each page downward so pages don't collide when
+  // clustered and stay in reading order (page 1 above page 2).
+  let pageIdx = 0;
   await pdfParseWithRender(buf, {
-    pagerender: (page) =>
-      page.getTextContent().then((tc) => {
+    pagerender: (page) => {
+      const offset = pageIdx-- * 100_000;
+      return page.getTextContent().then((tc) => {
         for (const it of tc.items)
           toks.push({
             x: Math.round(it.transform[4]!),
-            y: Math.round(it.transform[5]!),
+            y: Math.round(it.transform[5]!) + offset,
             s: String(it.str).trim(),
           });
         return "";
-      }),
+      });
+    },
   });
   return toks;
 }
 
+/** A NLB transaction's name / amount / повик / account sit on near-identical baselines (Δy < ~5),
+ *  so tokens are clustered into a logical row with this Y tolerance — well under the ~36 between
+ *  transactions. That reunites the amount with its повикување / FACEBK / account for classification. */
+const Y_TOLERANCE = 8;
+/** Vertical window (± units) for gathering a transaction's classification tokens — comfortably
+ *  under the ~36 between transactions, so only this transaction's rows are captured. */
+const CLASSIFY_WINDOW = 14;
+/** Wider window for the повикување на број token (the closest one to the amount wins). */
+const REF_WINDOW = 30;
+
 function buildLines(toks: Tok[], statementNumber: number | null): NlbLine[] {
-  const byY = new Map<number, Tok[]>();
-  for (const t of toks) {
-    const row = byY.get(t.y) ?? [];
-    row.push(t);
-    byY.set(t.y, row);
+  const sorted = [...toks].sort((a, b) => b.y - a.y);
+  const rows: Tok[][] = [];
+  let cur: Tok[] = [];
+  let top = Infinity;
+  for (const t of sorted) {
+    if (top - t.y > Y_TOLERANCE) {
+      if (cur.length) rows.push(cur);
+      cur = [];
+      top = t.y;
+    }
+    cur.push(t);
   }
-  // Rows top-to-bottom = statement reading order.
-  const rows = [...byY.entries()]
-    .sort((a, b) => b[0] - a[0])
-    .map(([, r]) => r.sort((a, b) => a.x - b.x));
+  if (cur.length) rows.push(cur);
 
   const lines: NlbLine[] = [];
   let seq = 0;
-  for (const row of rows) {
-    if (row.filter((t) => MONEY.test(t.s)).length >= 4) continue; // header / "Vkupno" summary row
-    // amount = a money token with a 1–3 digit шифра to its right (the шифра column).
+  for (const raw of rows) {
+    const row = raw.sort((a, b) => a.x - b.x);
+    // A transaction row carries exactly ONE money token (its amount). The header (prev/debit/
+    // credit/new) and the "Вкупно денари" footer (debit+credit totals) carry ≥2 — skip them.
+    if (row.filter((t) => MONEY.test(t.s)).length >= 2) continue;
+    // amount = a money token with a 1–3 digit шифра to its right (the шифра column ~x404).
     const amtIdx = row.findIndex(
       (t, i) => MONEY.test(t.s) && row.some((u, j) => j > i && u.x > t.x && SIFRA.test(u.s)),
     );
@@ -88,11 +109,23 @@ function buildLines(toks: Tok[], statementNumber: number | null): NlbLine[] {
     const amount = den(amtTok.s);
     const direction: "IN" | "OUT" = amtTok.x < COLUMN_THRESHOLD ? "OUT" : "IN";
     const sifra = row.find((u, j) => j > amtIdx && u.x > amtTok.x && SIFRA.test(u.s))!.s;
-    const joined = row.map((t) => t.s).join(" ");
+    // Classification uses a WIDER vertical window around the amount (< the ~36 between transactions)
+    // so a повикување / FACEBK / account on a nearby baseline is captured even if it fell outside
+    // the tight amount cluster. Amount detection stays cluster-based → integrity is unaffected.
+    const joined = toks
+      .filter((t) => Math.abs(t.y - amtTok.y) <= CLASSIFY_WINDOW)
+      .sort((a, b) => a.x - b.x)
+      .map((t) => t.s)
+      .join(" ");
 
     const facebkCode = joined.match(FACEBK)?.[1] ?? null;
     const cardLast4 = joined.match(CARD)?.[1] ?? null;
-    const reference = joined.match(INVOICE_REF)?.[1] ?? null;
+    // повикување на број: pick the invoice-ref token CLOSEST (in y) to the amount, over a wider
+    // window — safe against grabbing a neighbouring transaction's повик (the nearest one wins).
+    const refTok = toks
+      .filter((t) => Math.abs(t.y - amtTok.y) <= REF_WINDOW && /^\d-\d{1,4}\/\d{4}$/.test(t.s))
+      .sort((a, b) => Math.abs(a.y - amtTok.y) - Math.abs(b.y - amtTok.y))[0];
+    const reference = refTok?.s ?? joined.match(INVOICE_REF)?.[1] ?? null;
     const bankRef = joined.match(BANK_REF)?.[1] ?? null;
     const accounts = [...joined.matchAll(ACCOUNT)]
       .map((m) => m[1]!)

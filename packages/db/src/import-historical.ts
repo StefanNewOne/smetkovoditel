@@ -76,7 +76,7 @@ const seqFromNumber = (num: string): number | null => {
 export async function importHistorical(
   db: PrismaClient,
   input: ImportInput,
-  opts: { apply: boolean },
+  opts: { apply: boolean; historical?: boolean },
 ): Promise<ImportReport> {
   const report: ImportReport = {
     ok: false,
@@ -97,7 +97,10 @@ export async function importHistorical(
   const clientByName = new Map(input.clients.map((c) => [c.name, c]));
   for (const c of input.clients) {
     if (!c.name) err("Client with empty name.");
-    if (c.channel === "INVOICE" && !c.taxId) err(`Client ${c.name}: INVOICE requires ЕДБ (B17).`);
+    // Historical back-fill may lack ЕДБ (not on the old sheets); allow it, but the client must
+    // get an ЕДБ before NEW invoices are issued (B17 still enforced at the wizard / W1 approval).
+    if (c.channel === "INVOICE" && !c.taxId && !opts.historical)
+      err(`Client ${c.name}: INVOICE requires ЕДБ (B17).`);
     if (!Number.isFinite(c.monthlyAmountMkd) || c.monthlyAmountMkd < 0)
       err(`Client ${c.name}: bad monthlyAmount.`);
   }

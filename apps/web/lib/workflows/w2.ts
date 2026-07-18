@@ -72,7 +72,7 @@ export async function ingestStatement(
   return ingestParsedStatement(parseNlbStatement(text), fileRef, source, userId);
 }
 
-async function ingestParsedStatement(
+export async function ingestParsedStatement(
   parsed: NlbStatement,
   fileRef: string,
   source: ImportSource,

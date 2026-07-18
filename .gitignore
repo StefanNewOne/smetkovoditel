@@ -50,3 +50,7 @@ _fixtures/
 _import/*
 !_import/*.example
 !_import/README.md
+
+# Real source data dropped in root for import (NEVER commit — real financial PII)
+/Фактури/
+/Фактури*.csv

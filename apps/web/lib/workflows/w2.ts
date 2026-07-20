@@ -514,3 +514,82 @@ export async function ignoreStatementLine(lineId: string, userId: string) {
     });
   });
 }
+
+export interface CategorizeResult {
+  expenseId: string;
+  learnedRule: boolean;
+  siblingMatches: number; // other pending OUT lines the learned rule would also catch (info only)
+}
+
+/** period id "YYYY-MM" from a statement-line date (booking period of the expense). */
+const periodOfDate = (d: Date) =>
+  `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+
+/**
+ * Resolve an outgoing statement line as an operating Expense (§4.2). Card/bank expense — the NLB
+ * statement IS the document, so no photo is required (B6). Atomic + audited, period-guarded (B9),
+ * idempotent (an already-processed line is rejected). With `rememberVendor`, learns a VendorRule so
+ * future imports auto-categorize the same merchant (the existing §4.2 CARD_TX pipeline).
+ */
+export async function categorizeStatementLine(
+  lineId: string,
+  category: ExpenseCategory,
+  opts: { rememberVendor?: boolean },
+  userId: string,
+): Promise<CategorizeResult> {
+  return prisma.$transaction(async (tx) => {
+    const line = await tx.statementLine.findUnique({ where: { id: lineId } });
+    if (!line || line.processed) throw new Error("Линијата не постои или е веќе решена.");
+    if (line.direction !== Direction.OUT) throw new Error("Само излезни линии се трошоци.");
+    await assertPeriodOpen(tx, periodOfDate(line.date)); // B9
+
+    const vendor = line.counterpartyName ?? line.description ?? null;
+    const exp = await tx.expense.create({
+      data: {
+        category,
+        vendor,
+        amount: line.amount, // денари, from the statement (B10)
+        date: line.date,
+        paymentChannel: line.classifiedAs === "CARD_TX" ? PayChannel.CARD : PayChannel.BANK,
+        isBillable: false, // agency operating cost; the card/bank statement is the record (B6)
+        statementLineId: line.id,
+      },
+    });
+    await tx.statementLine.update({
+      where: { id: line.id },
+      data: { processed: true, linkedType: "Expense", linkedId: exp.id },
+    });
+
+    let learnedRule = false;
+    let siblingMatches = 0;
+    const pattern = (vendor ?? "").trim().toUpperCase();
+    if (opts.rememberVendor && pattern.length >= 3) {
+      // VendorRule matches by `merchant.includes(pattern)` on import (§4.2). Dedupe on (pattern, category).
+      const existing = await tx.vendorRule.findFirst({ where: { pattern, category } });
+      if (!existing) {
+        await tx.vendorRule.create({ data: { pattern, category, vendor } });
+        learnedRule = true;
+      }
+      const pending = await tx.statementLine.findMany({
+        where: { processed: false, direction: Direction.OUT, id: { not: line.id } },
+        select: { counterpartyName: true, description: true },
+      });
+      siblingMatches = pending.filter((p) =>
+        `${p.counterpartyName ?? ""} ${p.description ?? ""}`.toUpperCase().includes(pattern),
+      ).length;
+    }
+
+    log.info(
+      { event: "line.classified", statementLineId: line.id, category, learnedRule },
+      "извод-линија категоризирана како трошок",
+    );
+    await writeAudit(tx, {
+      entity: "StatementLine",
+      entityId: line.id,
+      action: "line.categorized",
+      diff: { category, amount: line.amount, expenseId: exp.id, learnedRule },
+      userId,
+    });
+    return { expenseId: exp.id, learnedRule, siblingMatches };
+  });
+}

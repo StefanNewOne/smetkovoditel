@@ -92,6 +92,8 @@ enum ExpenseCategory {
   BANK_FEES
   SALARY
   HONORAR
+  REPRESENTATION // кафани / ресторани / угостителство
+  MARKETING // маркетинг (не-Meta)
   OTHER
 }
 

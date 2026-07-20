@@ -36,11 +36,15 @@ interface DraftLine {
  * INVOICE → DRAFT (+18% ДДВ, number assigned at approval); CASH_OBLIGATION → OPEN (no number/VAT).
  * Idempotent: an existing charge for (client, period, kind) is skipped (safe to re-run).
  */
-export async function generateCharges(period: string, userId: string) {
+export async function generateCharges(
+  period: string,
+  userId: string,
+  channel?: "INVOICE" | "CASH",
+) {
   await assertPeriodOpen(prisma, period); // B9
   const start = periodStart(period);
   const clients = await prisma.client.findMany({
-    where: { status: ClientStatus.ACTIVE },
+    where: { status: ClientStatus.ACTIVE, ...(channel ? { paymentChannel: channel } : {}) },
     include: { packages: true, lineTemplates: { where: { active: true } } },
   });
 
@@ -141,7 +145,7 @@ export async function generateCharges(period: string, userId: string) {
           period,
           issueDate,
           dueDate,
-          status: isInvoice ? ChargeStatus.DRAFT : ChargeStatus.OPEN,
+          status: ChargeStatus.DRAFT, // SM-89: both invoice and cash start as DRAFT (reviewable)
           subtotal,
           vatAmount,
           total,
@@ -171,23 +175,8 @@ export async function generateCharges(period: string, userId: string) {
         }
       }
 
-      // creditBalance auto-apply for cash obligations immediately (B18). For invoices this
-      // happens at approval. Modeled as an internal paidAmount adjustment (audited), not a
-      // cash Payment, since credit is not a money movement.
-      if (!isInvoice && client.creditBalance > 0 && total > 0) {
-        const applied = Math.min(client.creditBalance, total);
-        await tx.charge.update({
-          where: { id: charge.id },
-          data: {
-            paidAmount: applied,
-            status: applied >= total ? ChargeStatus.PAID : ChargeStatus.PARTIALLY_PAID,
-          },
-        });
-        await tx.client.update({
-          where: { id: client.id },
-          data: { creditBalance: { decrement: applied } },
-        });
-      }
+      // creditBalance auto-apply (B18) now happens at approval for both kinds (SM-89) — the charge
+      // is a DRAFT here, so nothing is applied yet.
 
       await writeAudit(tx, {
         entity: "Charge",
@@ -293,6 +282,48 @@ export async function approveInvoice(
     }
   }
   throw new Error("Нумерацијата не успеа по повеќе обиди.");
+}
+
+/** SM-89 — approve a CASH_OBLIGATION draft (DRAFT → OPEN). No number, no VAT; applies creditBalance
+ *  (B18) and stamps the issue date at approval. Period-guarded (B9), audited. */
+export async function approveCashObligation(chargeId: string, userId: string) {
+  await prisma.$transaction(async (tx) => {
+    const charge = await tx.charge.findUnique({ where: { id: chargeId } });
+    if (!charge) throw new Error("Задолжувањето не постои.");
+    if (charge.kind !== ChargeKind.CASH_OBLIGATION)
+      throw new Error("Само кеш-обврска се одобрува вака.");
+    if (charge.status !== ChargeStatus.DRAFT) return;
+    await assertPeriodOpen(tx, charge.period); // B9
+
+    let paidAmount = charge.paidAmount;
+    const client = await tx.client.findUnique({ where: { id: charge.clientId } });
+    if (client && client.creditBalance > 0 && charge.total > paidAmount) {
+      const applied = Math.min(client.creditBalance, charge.total - paidAmount);
+      paidAmount += applied;
+      await tx.client.update({
+        where: { id: client.id },
+        data: { creditBalance: { decrement: applied } },
+      });
+    }
+    const status =
+      paidAmount >= charge.total
+        ? ChargeStatus.PAID
+        : paidAmount > 0
+          ? ChargeStatus.PARTIALLY_PAID
+          : ChargeStatus.OPEN;
+
+    await tx.charge.update({
+      where: { id: chargeId },
+      data: { status, paidAmount, issueDate: new Date() },
+    });
+    await writeAudit(tx, {
+      entity: "Charge",
+      entityId: chargeId,
+      action: "approve.cash",
+      diff: { status, paidAmount },
+      userId,
+    });
+  });
 }
 
 /** SM-89 — delete an unneeded DRAFT charge. Safe: a draft has no assigned number (B1: the counter

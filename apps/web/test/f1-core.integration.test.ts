@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { zCreateContractor } from "@smetko/shared";
-import { generateCharges, approveInvoice } from "@/lib/workflows/w1";
+import { approveCashObligation, generateCharges, approveInvoice } from "@/lib/workflows/w1";
 import { collectCash } from "@/lib/workflows/w3";
 import { calcHonorar, payoutHonorar } from "@/lib/workflows/w5";
 import { recordCashExpense } from "@/lib/workflows/w6";
@@ -43,13 +43,13 @@ describe("W1 — charge generation & invoice numbering", () => {
     expect(approved.seqInMonth).toBe(1);
   });
 
-  it("T10 / B12: CASH client → CASH_OBLIGATION, OPEN, no number, no VAT; one Charge per client/period/kind", async () => {
+  it("T10 / B12: CASH client → CASH_OBLIGATION (DRAFT), no number, no VAT; one Charge per client/period/kind", async () => {
     await createCashClient({ userId, monthlyAmount: 3_000_000 });
 
     await generateCharges(PERIOD, userId);
     const charge = await prisma.charge.findFirstOrThrow({});
     expect(charge.kind).toBe("CASH_OBLIGATION");
-    expect(charge.status).toBe("OPEN");
+    expect(charge.status).toBe("DRAFT"); // SM-89: cash also starts DRAFT (approved → OPEN)
     expect(charge.vatAmount).toBe(0);
     expect(charge.invoiceNumber).toBeNull();
 
@@ -102,6 +102,7 @@ describe("W3 — cash collection", () => {
     const client = await createCashClient({ userId, monthlyAmount: 1_000_000 });
     await generateCharges(PERIOD, userId);
     const charge = await prisma.charge.findFirstOrThrow({ where: { clientId: client.id } });
+    await approveCashObligation(charge.id, userId); // SM-89: DRAFT → OPEN before collecting
 
     // Pay 1.200.000 against a 1.000.000 obligation → 200.000 overpay → credit.
     await collectCash(

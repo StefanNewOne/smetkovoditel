@@ -403,7 +403,7 @@ function PayoutModal({
       className="fixed inset-0 z-[60] flex items-center justify-center p-6"
       style={{ background: "rgba(20,30,48,0.45)" }}
     >
-      <div className="w-[440px] animate-fade-up rounded-[18px] bg-surface p-7">
+      <div className="max-h-[90vh] w-full max-w-[440px] animate-fade-up overflow-y-auto rounded-[18px] bg-surface p-7">
         <h3 className="mb-1 text-[15px] font-extrabold text-ink">Исплата на хонорар</h3>
         <p className="mb-5 text-[12px] text-muted-2">
           Нето за исплата: {formatMKD(payment.net, { decimals: 0 })} ден
@@ -493,7 +493,7 @@ function NewContractorModal({
       className="fixed inset-0 z-[60] flex items-center justify-center p-6"
       style={{ background: "rgba(20,30,48,0.45)" }}
     >
-      <div className="w-[440px] animate-fade-up rounded-[18px] bg-surface p-7">
+      <div className="max-h-[90vh] w-full max-w-[440px] animate-fade-up overflow-y-auto rounded-[18px] bg-surface p-7">
         <h3 className="mb-5 text-[15px] font-extrabold text-ink">Нов хонорарец</h3>
         <label className="block text-[12px] font-semibold text-muted">
           Име

@@ -44,9 +44,9 @@ export default async function ClientsPage({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border bg-surface">
+      <div className="overflow-x-auto rounded-xl border border-border bg-surface">
         <div
-          className="grid items-center border-b border-border-2 px-5.5 py-3 text-[11px] font-bold uppercase tracking-[0.5px] text-muted-2"
+          className="grid min-w-[720px] items-center border-b border-border-2 px-5.5 py-3 text-[11px] font-bold uppercase tracking-[0.5px] text-muted-2"
           style={{ gridTemplateColumns: COLS }}
         >
           <span>Клиент</span>
@@ -67,7 +67,7 @@ export default async function ClientsPage({
           <Link
             key={c.id}
             href={`/clients/${c.id}`}
-            className="grid items-center border-b border-border-3 px-5.5 py-3.5 text-[13px] hover:bg-[#fbfcfe]"
+            className="grid min-w-[720px] items-center border-b border-border-3 px-5.5 py-3.5 text-[13px] hover:bg-[#fbfcfe]"
             style={{ gridTemplateColumns: COLS }}
           >
             <span className="flex items-center gap-2.5 font-bold text-ink">

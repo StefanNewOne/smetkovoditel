@@ -119,6 +119,15 @@ client-filtered payment matcher and expense categorization + vendor learning.
 | SM-82 | Modification | NLB parser captures payer **account** (Cyrillic names garbled by the PDF font; lineHash byte-stable) + backfill (733 lines) + account→client suggest learned from matched-payment history | §4.2            | ☑      |
 | SM-83 | Feature      | `categorizeStatementLine` → Expense (B6, B9 atomic) + VendorRule "remember vendor"; migration adds REPRESENTATION/MARKETING                                                               | §4.2, B6        | ☑      |
 
+## Responsive layout — 2026-07-20 (developer request)
+
+Per `responsive.md`. The shell forced `min-w-[1180px]` with no breakpoints → every screen overflowed
+smaller viewports. Fixed in three levels (A stop-overflow, B stacking, C mobile sidebar).
+
+| ID    | Type         | Title                                                                                          | Ref | Status |
+| ----- | ------------ | ---------------------------------------------------------------------------------------------- | --- | ------ |
+| SM-84 | Modification | Responsive layout: drop min-w-[1180px], stack 2-col grids, scroll/stack tables, drawer sidebar | UI  | ◐      |
+
 **SM-82 finding:** the NLB PDF renders Cyrillic in a custom font that pdf-parse decodes to private
 glyphs (payer _names_ are unreadable). The payer _account_ is plain ASCII, so it is the reliable
 key: the parser captures it (at/below the amount, outside the classify window — stored only, never

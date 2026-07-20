@@ -175,7 +175,7 @@ function AddEmployeeModal({
       className="fixed inset-0 z-[60] flex items-center justify-center p-6"
       style={{ background: "rgba(20,30,48,0.45)" }}
     >
-      <div className="w-[420px] animate-fade-up rounded-[18px] bg-surface p-7">
+      <div className="max-h-[90vh] w-full max-w-[420px] animate-fade-up overflow-y-auto rounded-[18px] bg-surface p-7">
         <h3 className="mb-5 text-[15px] font-extrabold text-ink">Нов вработен</h3>
         <label className="block text-[12px] font-semibold text-muted">
           Име

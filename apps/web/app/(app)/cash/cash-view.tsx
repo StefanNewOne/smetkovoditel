@@ -80,9 +80,9 @@ export function CashView({
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-border bg-surface">
+      <div className="overflow-x-auto rounded-xl border border-border bg-surface">
         <div
-          className="grid items-center gap-3 border-b border-border-2 px-5.5 py-3 text-[11px] font-bold uppercase tracking-[0.5px] text-muted-2"
+          className="grid min-w-[720px] items-center gap-3 border-b border-border-2 px-5.5 py-3 text-[11px] font-bold uppercase tracking-[0.5px] text-muted-2"
           style={{ gridTemplateColumns: "90px 1.8fr 1.2fr 1fr 110px 40px" }}
         >
           <span>Датум</span>
@@ -100,7 +100,7 @@ export function CashView({
         {ledger.entries.map((e) => (
           <div
             key={e.id}
-            className="grid items-center gap-3 border-b border-border-3 px-5.5 py-3 text-[13px] last:border-0"
+            className="grid min-w-[720px] items-center gap-3 border-b border-border-3 px-5.5 py-3 text-[13px] last:border-0"
             style={{ gridTemplateColumns: "90px 1.8fr 1.2fr 1fr 110px 40px" }}
           >
             <span className="text-[12px] text-muted">{e.date}</span>
@@ -371,7 +371,7 @@ function Modal({
       className="fixed inset-0 z-[60] flex items-center justify-center p-6"
       style={{ background: "rgba(20,30,48,0.45)" }}
     >
-      <div className="w-[460px] animate-fade-up rounded-[18px] bg-surface p-7">
+      <div className="max-h-[90vh] w-full max-w-[460px] animate-fade-up overflow-y-auto rounded-[18px] bg-surface p-7">
         <div className="mb-5 flex items-center justify-between">
           <h3 className="text-[15px] font-extrabold text-ink">{title}</h3>
           <button onClick={onClose} className="text-[18px] text-muted-2 hover:text-ink">

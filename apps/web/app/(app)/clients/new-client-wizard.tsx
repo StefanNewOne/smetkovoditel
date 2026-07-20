@@ -119,7 +119,7 @@ export function NewClientWizard() {
           className="fixed inset-0 z-[60] flex items-center justify-center p-6"
           style={{ background: "rgba(20,30,48,0.45)" }}
         >
-          <div className="w-[560px] animate-fade-up rounded-[18px] bg-surface p-7">
+          <div className="max-h-[90vh] w-full max-w-[560px] animate-fade-up overflow-y-auto rounded-[18px] bg-surface p-7">
             <div className="mb-1 flex items-center justify-between">
               <span className="text-[12px] font-bold uppercase tracking-[0.5px] text-muted-2">
                 Чекор {step + 1} од 5 · {STEPS[step]}

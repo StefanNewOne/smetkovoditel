@@ -41,7 +41,7 @@ export function Sidebar({
   const pathname = usePathname();
 
   return (
-    <aside className="flex w-[236px] shrink-0 flex-col border-r border-border bg-surface px-3.5 py-5">
+    <aside className="hidden w-[236px] shrink-0 flex-col border-r border-border bg-surface px-3.5 py-5 md:flex">
       <div className="mb-6 flex items-center gap-2 px-2">
         <span className="rounded-md bg-accent px-2 py-1 text-[15px] font-extrabold tracking-[0.5px] text-white">
           GO

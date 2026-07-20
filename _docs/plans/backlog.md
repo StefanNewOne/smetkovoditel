@@ -126,7 +126,9 @@ smaller viewports. Fixed in three levels (A stop-overflow, B stacking, C mobile 
 
 | ID    | Type         | Title                                                                                          | Ref | Status |
 | ----- | ------------ | ---------------------------------------------------------------------------------------------- | --- | ------ |
-| SM-84 | Modification | Responsive layout: drop min-w-[1180px], stack 2-col grids, scroll/stack tables, drawer sidebar | UI  | ◐      |
+| SM-84 | Modification | Responsive layout: drop min-w-[1180px], stack 2-col grids, scroll/stack tables, drawer sidebar | UI  | ☑      |
+
+Levels A (stop overflow), B (stack under lg), C (mobile drawer sidebar under md) all landed.
 
 **SM-82 finding:** the NLB PDF renders Cyrillic in a custom font that pdf-parse decodes to private
 glyphs (payer _names_ are unreadable). The payer _account_ is plain ASCII, so it is the reliable

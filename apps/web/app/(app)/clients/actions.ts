@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { BillingMode, LineType, prisma } from "@smetko/db";
+import { BillingMode, ClientStatus, LineType, prisma } from "@smetko/db";
 import {
   type CreateClientInput,
   type ChangePackageInput,
@@ -10,8 +10,55 @@ import {
 } from "@smetko/shared";
 import { requireWriter } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
+import {
+  type DeletionImpact,
+  deleteClient,
+  getDeletionImpact,
+  setClientStatus,
+} from "@/lib/workflows/client-admin";
 
 export type ActionResult = { ok: true; id: string } | { ok: false; error: string };
+
+/** SM-86 — impact preview for the delete confirmation. */
+export async function deletionImpactAction(
+  clientId: string,
+): Promise<{ ok: true; impact: DeletionImpact } | { ok: false; error: string }> {
+  const auth = await requireWriter();
+  if (!auth.ok) return { ok: false, error: auth.error };
+  const impact = await getDeletionImpact(clientId);
+  if (!impact) return { ok: false, error: "Клиентот не постои." };
+  return { ok: true, impact };
+}
+
+/** SM-86 — deactivate / reactivate (non-ACTIVE clients are skipped by W1). */
+export async function setClientStatusAction(
+  clientId: string,
+  status: ClientStatus,
+): Promise<ActionResult> {
+  const auth = await requireWriter();
+  if (!auth.ok) return { ok: false, error: auth.error };
+  try {
+    await setClientStatus(clientId, status, auth.user.id);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Не успеа." };
+  }
+  revalidatePath(`/clients/${clientId}`);
+  revalidatePath("/clients");
+  return { ok: true, id: clientId };
+}
+
+/** SM-86 — hard-delete a client and all its records (frees the bank statement lines). */
+export async function deleteClientAction(clientId: string): Promise<ActionResult> {
+  const auth = await requireWriter();
+  if (!auth.ok) return { ok: false, error: auth.error };
+  try {
+    await deleteClient(clientId, auth.user.id);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Бришењето не успеа." };
+  }
+  revalidatePath("/clients");
+  return { ok: true, id: clientId };
+}
 
 /** Create a client + its first (versioned) package + optional Meta/Actors extras (SM-10). */
 export async function createClient(input: CreateClientInput): Promise<ActionResult> {

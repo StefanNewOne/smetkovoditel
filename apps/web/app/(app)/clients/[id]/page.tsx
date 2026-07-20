@@ -6,6 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import { formatMKD } from "@smetko/shared";
 import { getClient } from "@/lib/clients";
 import { Avatar, ChannelBadge, StatusBadge } from "@/components/ui/badges";
+import { ClientAdminActions } from "./client-admin-actions";
 
 function fmtDate(d: Date | null): string {
   return d
@@ -46,14 +47,28 @@ export default async function ClientProfile({ params }: { params: Promise<{ id: 
         {/* Left column */}
         <div className="flex flex-col gap-4">
           <div className="rounded-xl border border-border bg-surface p-6">
-            <div className="flex items-center gap-3.5">
+            <div className="flex flex-wrap items-center gap-3.5">
               <Avatar name={client.name} size={48} />
-              <div>
-                <h2 className="text-[19px] font-extrabold text-ink">{client.name}</h2>
-                <p className="mt-0.5 flex items-center gap-2 text-[12px] text-muted-2">
+              <div className="min-w-0">
+                <h2 className="text-[19px] font-extrabold text-ink">
+                  {client.number != null && (
+                    <span className="mr-1.5 text-muted-2">#{client.number}</span>
+                  )}
+                  {client.name}
+                </h2>
+                <p className="mt-0.5 flex flex-wrap items-center gap-2 text-[12px] text-muted-2">
                   {client.taxId ? `ЕДБ ${client.taxId}` : "без ЕДБ"}
                   <ChannelBadge channel={client.paymentChannel} />
+                  <StatusBadge status={client.status} />
+                  <span>старт: {fmtDate(client.startDate)}</span>
                 </p>
+              </div>
+              <div className="ml-auto">
+                <ClientAdminActions
+                  clientId={client.id}
+                  name={client.name}
+                  status={client.status}
+                />
               </div>
             </div>
             <div className="mt-5 grid grid-cols-4 gap-3">

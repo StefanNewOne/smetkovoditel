@@ -107,3 +107,14 @@ fill `<vps-ip>`/`<url>` placeholders, install `gitleaks` binary on dev machines.
 ADS/ACTORS invoice lines (whole invoice is 18%-VATed — standard MK treatment); a unique
 `ContractorPayment(contractor, period)` would be wrong (multiple honorari per month are legal).
 **Cosmetic/deferred:** Dashboard KPIs and client "Маргина YTD" show "—" (marked Во изградба).
+
+## Statement resolution — 2026-07-20 (developer request)
+
+Per `statement-resolution.md`. A dedicated **Решавање** screen for the two Import queues, with a
+client-filtered payment matcher and expense categorization + vendor learning.
+
+| ID    | Type         | Title                                                                                                                       | Master Plan ref | Status |
+| ----- | ------------ | --------------------------------------------------------------------------------------------------------------------------- | --------------- | ------ |
+| SM-81 | Feature      | Решавање screen: Уплати (client-filtered invoice pick) + Трошоци (categorize) sections; Import keeps alarm queues           | §9.4            | ☐      |
+| SM-82 | Modification | NLB parser extracts payer `counterpartyName` (additive — 152 + golden unaffected) + backfill + client auto-suggest          | §4.2            | ☐      |
+| SM-83 | Feature      | `categorizeStatementLine` → Expense (B6, B9 atomic) + VendorRule "remember vendor"; migration adds REPRESENTATION/MARKETING | §4.2, B6        | ☐      |

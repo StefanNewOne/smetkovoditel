@@ -294,3 +294,24 @@ export async function approveInvoice(
   }
   throw new Error("Нумерацијата не успеа по повеќе обиди.");
 }
+
+/** SM-89 — delete an unneeded DRAFT charge. Safe: a draft has no assigned number (B1: the counter
+ *  is not consumed until issuance) and no payments. Only DRAFT; period-guarded (B9); audited. */
+export async function deleteDraftCharge(chargeId: string, userId: string) {
+  await prisma.$transaction(async (tx) => {
+    const charge = await tx.charge.findUnique({ where: { id: chargeId } });
+    if (!charge) throw new Error("Задолжувањето не постои.");
+    if (charge.status !== ChargeStatus.DRAFT)
+      throw new Error("Само ДРАФТ задолжување може да се избрише.");
+    await assertPeriodOpen(tx, charge.period); // B9
+    await tx.chargeLine.deleteMany({ where: { chargeId } });
+    await writeAudit(tx, {
+      entity: "Charge",
+      entityId: chargeId,
+      action: "delete.draft",
+      diff: { clientId: charge.clientId, period: charge.period, total: charge.total },
+      userId,
+    });
+    await tx.charge.delete({ where: { id: chargeId } });
+  });
+}

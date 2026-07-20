@@ -6,7 +6,7 @@ import { currentPeriod, isValidPeriod } from "@smetko/shared";
 import { requireWriter } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
 import { assertPeriodOpen } from "@/lib/period-guard";
-import { approveInvoice, generateCharges } from "@/lib/workflows/w1";
+import { approveInvoice, deleteDraftCharge, generateCharges } from "@/lib/workflows/w1";
 import { closePeriod, type CloseResult } from "@/lib/workflows/w8";
 
 export type W1Result =
@@ -38,6 +38,19 @@ export async function approveCharge(chargeId: string): Promise<ApproveResult> {
     return { ok: true, invoiceNumber };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Нумерацијата не успеа." };
+  }
+}
+
+/** SM-89 — delete an unneeded DRAFT charge. */
+export async function deleteDraftAction(chargeId: string): Promise<SimpleResult> {
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  try {
+    await deleteDraftCharge(chargeId, auth.user.id);
+    revalidatePath("/charges");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Бришењето не успеа." };
   }
 }
 

@@ -6,7 +6,14 @@ import { ChevronLeft, ChevronRight, Lock, Play } from "lucide-react";
 import { formatMKD, parseDenari, shiftPeriod } from "@smetko/shared";
 import { StatusBadge } from "@/components/ui/badges";
 import type { ChargeRow } from "@/lib/charges";
-import { approveAllDrafts, approveCharge, closePeriodAction, creditNote, runW1 } from "./actions";
+import {
+  approveAllDrafts,
+  approveCharge,
+  closePeriodAction,
+  creditNote,
+  deleteDraftAction,
+  runW1,
+} from "./actions";
 
 interface CloseBlocker {
   key: string;
@@ -192,20 +199,36 @@ export function ChargesView({
             <span className="hidden md:block">
               <StatusBadge status={c.status} />
             </span>
-            <span className="text-left md:text-right">
-              {c.kind === "INVOICE" && c.status === "DRAFT" ? (
-                <button
-                  onClick={() =>
-                    run(async () => {
-                      const r = await approveCharge(c.id);
-                      setMsg(r.ok ? `Фактура ${r.invoiceNumber} издадена.` : r.error);
-                    })
-                  }
-                  disabled={pending || closed}
-                  className="rounded-[7px] bg-accent px-3 py-1.5 text-[12px] font-bold text-white hover:opacity-90 disabled:opacity-40"
-                >
-                  Одобри
-                </button>
+            <span className="flex items-center justify-start gap-2 md:justify-end">
+              {c.status === "DRAFT" ? (
+                <>
+                  {c.kind === "INVOICE" && (
+                    <button
+                      onClick={() =>
+                        run(async () => {
+                          const r = await approveCharge(c.id);
+                          setMsg(r.ok ? `Фактура ${r.invoiceNumber} издадена.` : r.error);
+                        })
+                      }
+                      disabled={pending || closed}
+                      className="rounded-[7px] bg-accent px-3 py-1.5 text-[12px] font-bold text-white hover:opacity-90 disabled:opacity-40"
+                    >
+                      Одобри
+                    </button>
+                  )}
+                  <button
+                    onClick={() =>
+                      run(async () => {
+                        const r = await deleteDraftAction(c.id);
+                        if (!r.ok) setMsg(r.error);
+                      })
+                    }
+                    disabled={pending || closed}
+                    className="text-[12px] font-bold text-danger hover:underline disabled:opacity-40"
+                  >
+                    Избриши
+                  </button>
+                </>
               ) : c.kind === "INVOICE" && c.invoiceNumber ? (
                 <button
                   onClick={() => setCnFor(c)}

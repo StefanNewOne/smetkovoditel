@@ -113,8 +113,14 @@ ADS/ACTORS invoice lines (whole invoice is 18%-VATed — standard MK treatment);
 Per `statement-resolution.md`. A dedicated **Решавање** screen for the two Import queues, with a
 client-filtered payment matcher and expense categorization + vendor learning.
 
-| ID    | Type         | Title                                                                                                                       | Master Plan ref | Status |
-| ----- | ------------ | --------------------------------------------------------------------------------------------------------------------------- | --------------- | ------ |
-| SM-81 | Feature      | Решавање screen: Уплати (client-filtered invoice pick) + Трошоци (categorize) sections; Import keeps alarm queues           | §9.4            | ☐      |
-| SM-82 | Modification | NLB parser extracts payer `counterpartyName` (additive — 152 + golden unaffected) + backfill + client auto-suggest          | §4.2            | ☐      |
-| SM-83 | Feature      | `categorizeStatementLine` → Expense (B6, B9 atomic) + VendorRule "remember vendor"; migration adds REPRESENTATION/MARKETING | §4.2, B6        | ☐      |
+| ID    | Type         | Title                                                                                                                                                                                     | Master Plan ref | Status |
+| ----- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ------ |
+| SM-81 | Feature      | Решавање screen: Уплати (client-filtered invoice pick) + Трошоци (categorize) sections; Import keeps alarm queues                                                                         | §9.4            | ☑      |
+| SM-82 | Modification | NLB parser captures payer **account** (Cyrillic names garbled by the PDF font; lineHash byte-stable) + backfill (733 lines) + account→client suggest learned from matched-payment history | §4.2            | ☑      |
+| SM-83 | Feature      | `categorizeStatementLine` → Expense (B6, B9 atomic) + VendorRule "remember vendor"; migration adds REPRESENTATION/MARKETING                                                               | §4.2, B6        | ☑      |
+
+**SM-82 finding:** the NLB PDF renders Cyrillic in a custom font that pdf-parse decodes to private
+glyphs (payer _names_ are unreadable). The payer _account_ is plain ASCII, so it is the reliable
+key: the parser captures it (at/below the amount, outside the classify window — stored only, never
+in the lineHash), and the resolve screen learns `payer-account → client` from each matched payment.
+14/49 open payments got a correct suggestion immediately; coverage grows as more payments match.

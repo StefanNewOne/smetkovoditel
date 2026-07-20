@@ -62,7 +62,7 @@ const norm = (s: string) =>
     .trim();
 
 export async function getResolveCenter() {
-  const [qPayments, qExpenses, clients, open] = await Promise.all([
+  const [qPayments, qExpenses, clients, open, history] = await Promise.all([
     prisma.statementLine.findMany({
       where: { processed: false, direction: "IN" },
       orderBy: { amount: "desc" },
@@ -88,7 +88,25 @@ export async function getResolveCenter() {
       orderBy: { seqInMonth: "desc" },
       take: 500,
     }),
+    // SM-82: learn payer account → client from already-matched incoming payments, so the next
+    // payment from the same account auto-suggests that client (Cyrillic payer names are unreadable
+    // in the PDF font — the account number is the reliable key).
+    prisma.statementLine.findMany({
+      where: {
+        direction: "IN",
+        processed: true,
+        counterpartyAccount: { not: null },
+        payment: { isNot: null },
+      },
+      select: { counterpartyAccount: true, payment: { select: { clientId: true } } },
+    }),
   ]);
+
+  const accountToClient = new Map<string, string>();
+  for (const h of history) {
+    if (h.counterpartyAccount && h.payment?.clientId)
+      accountToClient.set(h.counterpartyAccount, h.payment.clientId);
+  }
 
   const openCharges: ChargeOption[] = open.map((c) => ({
     id: c.id,
@@ -111,14 +129,19 @@ export async function getResolveCenter() {
   const payments: PaymentItem[] = qPayments.map((l) => {
     const exact = byRemaining.get(l.amount);
     const payer = l.counterpartyName ?? null;
-    const clientHit = payer ? clientByNorm.get(norm(payer)) : undefined;
+    // Primary: payer account learned from a prior matched payment. Fallback: payer-name match
+    // (works only for the rare readable/Latin payer — Cyrillic names are garbled by the PDF font).
+    const byAccount = l.counterpartyAccount
+      ? accountToClient.get(l.counterpartyAccount)
+      : undefined;
+    const byName = payer ? clientByNorm.get(norm(payer))?.id : undefined;
     return {
       id: l.id,
       amount: `+${d0(l.amount)}`,
       title: l.reference ? `Уплата (повик ${l.reference})` : "Уплата без повик",
-      context: payer ?? l.counterpartyAccount ?? l.description ?? "",
+      context: l.counterpartyAccount ?? payer ?? l.description ?? "",
       suggestedChargeId: exact && exact.length === 1 ? exact[0]!.id : undefined,
-      suggestedClientId: clientHit?.id,
+      suggestedClientId: byAccount ?? byName,
     };
   });
 

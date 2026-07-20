@@ -28,19 +28,26 @@ golden tests are structurally unaffected; all 152 statements stay 100%.
 
 ---
 
-## SM-82 — Parser: extract payer/counterparty name + auto-suggest client
+## SM-82 — Parser: capture payer account + account→client suggest (REVISED)
 
-1. `buildLines` (apps/web/lib/pdf/nlb-parse.ts): add `counterpartyName` to `NlbLine` — the cleaned
-   name tokens from the transaction's `joined` text (generalize the existing CARD_TX `merchant`
-   extraction to IN transfers: strip account/повик/шифра/bankRef/amount tokens, keep the name).
-2. Map into `StatementLine.counterpartyName` in `ingestParsedStatement` (w2.ts).
-3. **Re-verify**: `nlb-real` (all 152 integrity-OK) + `golden` tests stay green (unchanged, since
-   amount/direction are untouched). Add an assertion that a known payment exposes its payer name.
-4. **Backfill**: a guarded one-off (`/api/cron/reparse-names` or a script) re-parses the stored
-   PDFs and updates `counterpartyName` on existing lines — idempotent, no re-posting.
-5. Auto-suggest: `suggestClientForPayment(line)` — fuzzy match `counterpartyName`/`counterpartyAccount`
-   against `Client.name` (normalized, same `norm()` as import-alma) → a client suggestion. Combined
-   with the existing exact-amount charge suggestion. Suggestion only; human confirms (§4.2).
+**Reality found during implementation:** the NLB PDF renders Cyrillic in a custom font that
+pdf-parse decodes to private-use glyphs, so payer _names_ come out garbled ("РЕМИ ПАН МЕТОДИЈЕ" →
+`ɊȿɆɂ ɉȺɇ ɆȿɌɈȾɂȳȿ`). Name-based auto-suggest is therefore not viable without reverse-engineering
+the font. The payer _account_ number is plain ASCII and reliable — so the account is the key
+(developer-confirmed direction).
+
+1. `buildLines` (apps/web/lib/pdf/nlb-parse.ts): capture the payer account of an incoming transfer —
+   the nearest full account token AT OR BELOW the amount (`PAYER_WINDOW`), stored in
+   `counterpartyAccount`. The `lineHash` keeps using the old narrow-window account (`hashAccount`) so
+   it is **byte-stable** — dedupe (B13) and the backfill-by-hash both keep working.
+2. **Re-verify**: `nlb-real` (all 152 integrity-OK) + `golden` stay green (amount/direction
+   untouched). ✓
+3. **Backfill**: `/api/cron/backfill-payers` re-parses the stored PDFs and fills `counterpartyAccount`
+   on existing lines matched by the stable `lineHash` — idempotent, no re-posting. Ran: 733 lines.
+4. Auto-suggest: `getResolveCenter` learns `payer-account → client` from already-matched payments
+   (`StatementLine.direction=IN, processed, payment→clientId`) and suggests that client on the next
+   payment from the same account. Falls back to a name match only for the rare readable payer.
+   Suggestion only; human confirms (§4.2). 14/49 open payments matched immediately.
 
 ## SM-83 — Expense categorize + vendor learning (migration)
 

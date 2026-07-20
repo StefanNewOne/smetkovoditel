@@ -67,6 +67,23 @@ export async function generateCharges(period: string, userId: string) {
       continue;
     }
 
+    // SM-88 — respect the client's start date and the package billing cycle.
+    const anchor = client.startDate ?? pkg.effectiveFrom;
+    const anchorMonth = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1));
+    if (start < anchorMonth) {
+      skipped++; // client has not started yet in this period
+      continue;
+    }
+    if (pkg.billingCycle === "QUARTERLY") {
+      const monthsSinceStart =
+        (start.getUTCFullYear() - anchorMonth.getUTCFullYear()) * 12 +
+        (start.getUTCMonth() - anchorMonth.getUTCMonth());
+      if (monthsSinceStart % 3 !== 0) {
+        skipped++; // quarterly client — bill only on the cycle boundary (every 3rd month)
+        continue;
+      }
+    }
+
     const isInvoice = kind === ChargeKind.INVOICE;
     const vatRate = isInvoice ? VAT_RATE : 0;
 
@@ -74,7 +91,9 @@ export async function generateCharges(period: string, userId: string) {
       const lines: DraftLine[] = [
         {
           type: LineType.SERVICE,
-          description: pkg.description ?? "Месечен пакет",
+          description:
+            pkg.description ??
+            (pkg.billingCycle === "QUARTERLY" ? "Тромесечен пакет" : "Месечен пакет"),
           amount: pkg.monthlyAmount,
           vatRate,
         },

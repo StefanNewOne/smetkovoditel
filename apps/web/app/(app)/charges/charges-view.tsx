@@ -125,7 +125,7 @@ export function ChargesView({
 
       <div className="overflow-x-auto rounded-xl border border-border bg-surface">
         <div
-          className="grid min-w-[860px] items-center border-b border-border-2 px-5.5 py-3 text-[11px] font-bold uppercase tracking-[0.5px] text-muted-2"
+          className="hidden min-w-[860px] items-center border-b border-border-2 px-5.5 py-3 text-[11px] font-bold uppercase tracking-[0.5px] text-muted-2 md:grid"
           style={{ gridTemplateColumns: COLS }}
         >
           <span>Клиент</span>
@@ -147,10 +147,15 @@ export function ChargesView({
         {charges.map((c) => (
           <div
             key={c.id}
-            className="grid min-w-[860px] items-center border-b border-border-3 px-5.5 py-3 text-[13px] last:border-0"
+            className="flex flex-col gap-1.5 border-b border-border-3 px-4 py-3 text-[13px] last:border-0 md:grid md:min-w-[860px] md:items-center md:gap-0 md:px-5.5"
             style={{ gridTemplateColumns: COLS }}
           >
-            <span className="font-bold text-ink">{c.clientName}</span>
+            <span className="flex items-center justify-between gap-2 md:block">
+              <span className="font-bold text-ink">{c.clientName}</span>
+              <span className="md:hidden">
+                <StatusBadge status={c.status} />
+              </span>
+            </span>
             <span>
               {c.invoiceNumber ? (
                 <a
@@ -164,21 +169,30 @@ export function ChargesView({
               ) : (
                 <span className="text-muted">—</span>
               )}
+              <span className="text-[11px] font-bold text-muted-2 md:hidden">
+                {" · "}
+                {KIND_LABEL[c.kind] ?? c.kind}
+              </span>
             </span>
-            <span className="text-[11px] font-bold text-muted-2">
+            <span className="hidden text-[11px] font-bold text-muted-2 md:block">
               {KIND_LABEL[c.kind] ?? c.kind}
             </span>
-            <span className="text-right text-ink">{formatMKD(c.subtotal, { decimals: 0 })}</span>
-            <span className="text-right text-muted">
+            <span className="text-left text-ink md:text-right">
+              <span className="text-muted-2 md:hidden">Основица: </span>
+              {formatMKD(c.subtotal, { decimals: 0 })}
+            </span>
+            <span className="text-left text-muted md:text-right">
+              <span className="md:hidden">ДДВ: </span>
               {c.kind === "CASH_OBLIGATION" ? "—" : formatMKD(c.vatAmount, { decimals: 0 })}
             </span>
-            <span className="text-right font-bold text-ink">
+            <span className="text-left font-bold text-ink md:text-right">
+              <span className="font-normal text-muted-2 md:hidden">Вкупно: </span>
               {formatMKD(c.total, { decimals: 0 })}
             </span>
-            <span>
+            <span className="hidden md:block">
               <StatusBadge status={c.status} />
             </span>
-            <span className="text-right">
+            <span className="text-left md:text-right">
               {c.kind === "INVOICE" && c.status === "DRAFT" ? (
                 <button
                   onClick={() =>

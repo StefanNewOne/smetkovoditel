@@ -82,7 +82,7 @@ export function CashView({
 
       <div className="overflow-x-auto rounded-xl border border-border bg-surface">
         <div
-          className="grid min-w-[720px] items-center gap-3 border-b border-border-2 px-5.5 py-3 text-[11px] font-bold uppercase tracking-[0.5px] text-muted-2"
+          className="hidden min-w-[720px] items-center gap-3 border-b border-border-2 px-5.5 py-3 text-[11px] font-bold uppercase tracking-[0.5px] text-muted-2 md:grid"
           style={{ gridTemplateColumns: "90px 1.8fr 1.2fr 1fr 110px 40px" }}
         >
           <span>Датум</span>
@@ -100,23 +100,24 @@ export function CashView({
         {ledger.entries.map((e) => (
           <div
             key={e.id}
-            className="grid min-w-[720px] items-center gap-3 border-b border-border-3 px-5.5 py-3 text-[13px] last:border-0"
+            className="flex flex-col gap-1 border-b border-border-3 px-4 py-3 text-[13px] last:border-0 md:grid md:min-w-[720px] md:items-center md:gap-3 md:px-5.5"
             style={{ gridTemplateColumns: "90px 1.8fr 1.2fr 1fr 110px 40px" }}
           >
             <span className="text-[12px] text-muted">{e.date}</span>
-            <span className="text-ink">{e.description}</span>
+            <span className="font-semibold text-ink md:font-normal">{e.description}</span>
             <span className="text-[11.5px] text-muted">
+              <span className="text-muted-2 md:hidden">Документ: </span>
               {DOC_LABEL[e.documentType] ?? e.documentType}
               {e.documentNumber ? ` бр. ${e.documentNumber}` : ""}
             </span>
             <span className="text-[12px] text-muted-2">{e.counterpartyType}</span>
             <span
-              className={`text-right font-bold ${e.direction === "IN" ? "text-success" : "text-danger"}`}
+              className={`text-left font-bold md:text-right ${e.direction === "IN" ? "text-success" : "text-danger"}`}
             >
               {e.direction === "IN" ? "+" : "−"}
               {formatMKD(e.amount, { decimals: 0 })}
             </span>
-            <span className="text-center text-muted-2">{e.hasAttachment ? "📎" : ""}</span>
+            {e.hasAttachment && <span className="text-muted-2 md:text-center">📎</span>}
           </div>
         ))}
       </div>

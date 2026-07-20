@@ -7,6 +7,7 @@ import { formatMKD } from "@smetko/shared";
 import { getClient } from "@/lib/clients";
 import { Avatar, ChannelBadge, StatusBadge } from "@/components/ui/badges";
 import { ClientAdminActions } from "./client-admin-actions";
+import { GiroAccounts } from "./giro-accounts";
 
 function fmtDate(d: Date | null): string {
   return d
@@ -113,6 +114,16 @@ export default async function ClientProfile({ params }: { params: Promise<{ id: 
 
         {/* Right column */}
         <div className="flex flex-col gap-4">
+          {client.paymentChannel === "INVOICE" && (
+            <GiroAccounts
+              clientId={client.id}
+              accounts={client.bankAccounts.map((a) => ({
+                id: a.id,
+                account: a.account,
+                label: a.label,
+              }))}
+            />
+          )}
           <div className="rounded-xl border border-border bg-surface p-5">
             <h3 className="text-[14px] font-extrabold text-ink">Пакет-историја</h3>
             <p className="mb-3 mt-0.5 text-[11px] text-muted-2">

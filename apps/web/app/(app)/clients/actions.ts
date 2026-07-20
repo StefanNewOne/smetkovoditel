@@ -60,6 +60,37 @@ export async function deleteClientAction(clientId: string): Promise<ActionResult
   return { ok: true, id: clientId };
 }
 
+/** SM-85 — add a giro account to a client (used to match incoming payments, SM-90). */
+export async function addGiroAccountAction(
+  clientId: string,
+  account: string,
+): Promise<ActionResult> {
+  const auth = await requireWriter();
+  if (!auth.ok) return { ok: false, error: auth.error };
+  const acc = account.trim();
+  if (!acc) return { ok: false, error: "Внеси сметка." };
+  try {
+    await prisma.clientBankAccount.upsert({
+      where: { account: acc },
+      create: { clientId, account: acc },
+      update: { clientId },
+    });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Не успеа." };
+  }
+  revalidatePath(`/clients/${clientId}`);
+  return { ok: true, id: clientId };
+}
+
+/** SM-85 — remove a giro account. */
+export async function removeGiroAccountAction(id: string, clientId: string): Promise<ActionResult> {
+  const auth = await requireWriter();
+  if (!auth.ok) return { ok: false, error: auth.error };
+  await prisma.clientBankAccount.delete({ where: { id } });
+  revalidatePath(`/clients/${clientId}`);
+  return { ok: true, id: clientId };
+}
+
 /** Create a client + its first (versioned) package + optional Meta/Actors extras (SM-10). */
 export async function createClient(input: CreateClientInput): Promise<ActionResult> {
   const auth = await requireWriter();
@@ -73,6 +104,10 @@ export async function createClient(input: CreateClientInput): Promise<ActionResu
   const d = parsed.data;
 
   const id = await prisma.$transaction(async (tx) => {
+    const startDate = d.startDate ? new Date(d.startDate) : new Date();
+    const maxNo = await tx.client.aggregate({ _max: { number: true } });
+    const number = (maxNo._max.number ?? 0) + 1; // fixed client number (SM-85)
+
     const client = await tx.client.create({
       data: {
         name: d.name,
@@ -83,6 +118,8 @@ export async function createClient(input: CreateClientInput): Promise<ActionResu
         paymentChannel: d.paymentChannel,
         vatApplicable: d.paymentChannel === "INVOICE",
         paymentTermDays: d.paymentTermDays,
+        number,
+        startDate,
       },
     });
 
@@ -91,11 +128,21 @@ export async function createClient(input: CreateClientInput): Promise<ActionResu
       data: {
         clientId: client.id,
         monthlyAmount: d.monthlyAmount,
+        billingCycle: d.billingCycle,
         description: d.packageDescription || null,
-        effectiveFrom: new Date(),
+        effectiveFrom: startDate,
         createdById: user.id,
       },
     });
+
+    // Giro accounts (SM-85) — used to match incoming payments to this client (SM-90).
+    for (const account of d.giroAccounts) {
+      await tx.clientBankAccount.upsert({
+        where: { account },
+        create: { clientId: client.id, account },
+        update: { clientId: client.id },
+      });
+    }
 
     // Extras — pass-through templates (D2). META_ADS/ACTORS are always PASSTHROUGH_ACTUAL.
     if (d.metaAds) {

@@ -72,6 +72,7 @@ export default async function ClientsPage({
           >
             <span className="flex items-center gap-2.5 font-bold text-ink">
               <Avatar name={c.name} size={30} />
+              {c.number != null && <span className="text-muted-2">#{c.number}</span>}
               {c.name}
             </span>
             <span className="flex items-center gap-2 md:block">

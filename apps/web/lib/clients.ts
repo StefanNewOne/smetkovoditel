@@ -24,6 +24,7 @@ export async function getClients(channel?: "INVOICE" | "CASH") {
 
   return clients.map((c) => ({
     id: c.id,
+    number: c.number,
     name: c.name,
     taxId: c.taxId,
     paymentChannel: c.paymentChannel,
@@ -44,6 +45,7 @@ export async function getClient(id: string) {
       packages: { orderBy: { effectiveFrom: "desc" } },
       lineTemplates: { where: { active: true } },
       adAccounts: true,
+      bankAccounts: { orderBy: { createdAt: "asc" } },
       charges: { orderBy: { issueDate: "desc" }, include: { lines: true } },
     },
   });

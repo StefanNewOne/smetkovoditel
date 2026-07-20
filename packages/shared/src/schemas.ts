@@ -22,8 +22,11 @@ export const zCreateClient = z
     contactEmail: z.union([z.string().email("Невалидна е-пошта"), z.literal("")]).optional(),
     contactPhone: z.string().trim().optional(),
     paymentTermDays: z.number().int().min(0).max(120).default(15),
-    monthlyAmount: z.number().int().min(0), // ОСНОВИЦА во дени
+    monthlyAmount: z.number().int().min(0), // ОСНОВИЦА за еден циклус, во дени
+    billingCycle: z.enum(["MONTHLY", "QUARTERLY"]).default("MONTHLY"), // SM-88
+    startDate: z.string().trim().optional(), // "YYYY-MM-DD" — од кога клиентот е активен (SM-85)
     packageDescription: z.string().trim().optional(),
+    giroAccounts: z.array(z.string().trim().min(1)).default([]), // жиро-сметки за спарување (SM-85)
     metaAds: z.boolean().default(false),
     actors: z.boolean().default(false),
     adAccounts: z.array(zAdAccountInput).default([]),

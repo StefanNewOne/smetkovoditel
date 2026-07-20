@@ -63,6 +63,11 @@ enum BillingMode {
   FIXED
 }
 
+enum BillingCycle {
+  MONTHLY
+  QUARTERLY
+}
+
 enum MatchStatus {
   UNMATCHED
   AUTO_MATCHED
@@ -141,26 +146,43 @@ model Client {
   vatApplicable   Boolean                 @default(true)
   paymentTermDays Int                     @default(15)
   status          ClientStatus            @default(ACTIVE)
+  number          Int?                    @unique // фиксен интерен број на клиент (нумерирање фактури SM-87)
+  startDate       DateTime? // од кога клиентот е активен (гони W1 + тромесечен циклус)
   creditBalance   Int                     @default(0) // преплата → авто-примена на следен Charge (B18)
   packages        ServicePackage[]
   lineTemplates   RecurringLineTemplate[]
   charges         Charge[]
   adAccounts      AdAccount[]
+  bankAccounts    ClientBankAccount[]
   payments        Payment[]
   expenses        Expense[]
   createdAt       DateTime                @default(now())
 }
 
+// Жиро-сметки на клиент (SM-85). Влезна уплата се спарува по counterpartyAccount → клиент (SM-90),
+// бидејќи кириличното име на плаќачот е нечитливо во PDF фонтот.
+model ClientBankAccount {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  account   String   @unique // "300-0000052043-77"
+  label     String?
+  createdAt DateTime @default(now())
+
+  @@index([clientId])
+}
+
 model ServicePackage {
-  id            String    @id @default(cuid())
+  id            String       @id @default(cuid())
   clientId      String
-  client        Client    @relation(fields: [clientId], references: [id])
-  monthlyAmount Int // ОСНОВИЦА, МКД integer дени
+  client        Client       @relation(fields: [clientId], references: [id])
+  monthlyAmount Int // ОСНОВИЦА за еден циклус, МКД integer дени (тромесечен = 3-месечна сума)
+  billingCycle  BillingCycle @default(MONTHLY) // месечен / тромесечен (SM-88)
   description   String?
   effectiveFrom DateTime
   effectiveTo   DateTime?
   createdById   String
-  createdAt     DateTime  @default(now())
+  createdAt     DateTime     @default(now())
 
   @@index([clientId])
 }
@@ -184,7 +206,8 @@ model Charge {
   kind            ChargeKind
   period          String // "2026-08"
   seqInMonth      Int?
-  invoiceNumber   String? // "1-2/7-2026"; null за CASH_OBLIGATION
+  invoiceNumber   String? // легален број; null за CASH_OBLIGATION
+  internalRef     String? // интерна референца "1-{clientNo}/{M}-{YYYY}" (SM-87), за сите фактури
   issueDate       DateTime
   dueDate         DateTime
   status          ChargeStatus

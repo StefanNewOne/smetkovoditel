@@ -8,7 +8,14 @@ import {
   Prisma,
   prisma,
 } from "@smetko/db";
-import { addDays, invoiceNumber, periodStart, VAT_RATE } from "@smetko/shared";
+import {
+  addDays,
+  internalRef,
+  invoiceNumber,
+  NEW_NUMBERING_FROM,
+  periodStart,
+  VAT_RATE,
+} from "@smetko/shared";
 import { writeAudit } from "@/lib/audit";
 import { assertPeriodOpen } from "@/lib/period-guard";
 
@@ -198,16 +205,35 @@ export async function approveInvoice(
         }
         await assertPeriodOpen(tx, charge.period); // B9
 
-        const agg = await tx.charge.aggregate({
-          where: { period: charge.period, seqInMonth: { not: null } },
-          _max: { seqInMonth: true },
-        });
-        const seq = (agg._max.seqInMonth ?? 0) + 1;
-        const number = invoiceNumber(seq, charge.period);
+        const client = await tx.client.findUnique({ where: { id: charge.clientId } });
+        if (!client) throw new Error("Клиентот не постои.");
+
+        // Fixed client number (SM-85) — assign the next one if this client has none yet.
+        let clientNo = client.number;
+        if (clientNo == null) {
+          const maxNo = await tx.client.aggregate({ _max: { number: true } });
+          clientNo = (maxNo._max.number ?? 0) + 1;
+          await tx.client.update({ where: { id: client.id }, data: { number: clientNo } });
+        }
+        const intRef = internalRef(clientNo, charge.period);
+
+        // Legal number (SM-87): the running fiscal counter until 2026-08, then the internal scheme
+        // `1-{clientNo}/{M}-{YYYY}`. Both are always stored; from August the legal number == intRef.
+        let seq: number | null = null;
+        let number: string;
+        if (charge.period >= NEW_NUMBERING_FROM) {
+          number = intRef;
+        } else {
+          const agg = await tx.charge.aggregate({
+            where: { period: charge.period, seqInMonth: { not: null } },
+            _max: { seqInMonth: true },
+          });
+          seq = (agg._max.seqInMonth ?? 0) + 1;
+          number = invoiceNumber(seq, charge.period);
+        }
 
         let paidAmount = charge.paidAmount;
-        const client = await tx.client.findUnique({ where: { id: charge.clientId } });
-        if (client && client.creditBalance > 0 && charge.total > paidAmount) {
+        if (client.creditBalance > 0 && charge.total > paidAmount) {
           const applied = Math.min(client.creditBalance, charge.total - paidAmount);
           paidAmount += applied;
           await tx.client.update({
@@ -224,13 +250,20 @@ export async function approveInvoice(
 
         await tx.charge.update({
           where: { id: chargeId },
-          data: { seqInMonth: seq, invoiceNumber: number, status, paidAmount },
+          data: {
+            seqInMonth: seq,
+            invoiceNumber: number,
+            internalRef: intRef,
+            issueDate: new Date(), // датум на издавање = денот на одобрување (DRAFT→OPEN)
+            status,
+            paidAmount,
+          },
         });
         await writeAudit(tx, {
           entity: "Charge",
           entityId: chargeId,
           action: "approve",
-          diff: { invoiceNumber: number, seqInMonth: seq },
+          diff: { invoiceNumber: number, internalRef: intRef, seqInMonth: seq },
           userId,
         });
         return { invoiceNumber: number };

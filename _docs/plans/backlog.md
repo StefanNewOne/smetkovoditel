@@ -130,6 +130,23 @@ smaller viewports. Fixed in three levels (A stop-overflow, B stacking, C mobile 
 
 Levels A (stop overflow), B (stack under lg), C (mobile drawer sidebar under md) all landed.
 
+## Revision 1 — owner system review (2026-07-20)
+
+Per `revision-1.md`. Deferred to the end: attention-queue/FACEBK redesign, the `4080012325273`
+identification.
+
+| ID    | Type         | Title                                                                                          | Ref  | Status |
+| ----- | ------------ | ---------------------------------------------------------------------------------------------- | ---- | ------ |
+| SM-85 | Feature      | Client fixed number + start date + giro accounts (schema, wizard, profile, backfill)           | §3   | ☐      |
+| SM-86 | Feature      | Delete (cascade + free statement lines + audit) & deactivate client; KESH↔clients recon report | §3   | ☐      |
+| SM-87 | Modification | Dual numbering: internalRef `1-{clientNo}/{month}-{year}` + issue-date-on-approval             | B1   | ☐      |
+| SM-88 | Feature      | Monthly/quarterly `billingCycle` packages; W1 fires on cycle boundary (АБАУТ ХЕР)              | §3   | ☐      |
+| SM-89 | Feature      | Charges split CASH/INVOICE + per-section ИЗВРШИ + delete-draft + НАПЛАТИ / НАПЛАТА КЕШ         | §9.3 | ☐      |
+| SM-90 | Feature      | Решавање: client name from giro account + learn-on-match; new Трошоци expenses list            | §9.4 | ☐      |
+| SM-91 | Feature      | Settings: VendorRule CRUD (add/delete vendor→category)                                         | §4.2 | ☐      |
+| SM-92 | Feature      | Blagajna expense source (cash vs card/bank→statement) + НАПЛАТА КЕШ (cash clients, owed/paid)  | §2   | ☐      |
+| SM-93 | Modification | Import center: statements pagination / show-all + total count                                  | §9.4 | ☐      |
+
 **SM-82 finding:** the NLB PDF renders Cyrillic in a custom font that pdf-parse decodes to private
 glyphs (payer _names_ are unreadable). The payer _account_ is plain ASCII, so it is the reliable
 key: the parser captures it (at/below the amount, outside the classify window — stored only, never

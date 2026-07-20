@@ -23,6 +23,15 @@ export function invoiceNumber(seq: number, period: string): string {
   return `1-${seq}/${m}-${y}`;
 }
 
+/** Internal reference `1-{clientNo}/{M}-{YYYY}` (SM-87) — fixed client number, month, year. */
+export function internalRef(clientNo: number, period: string): string {
+  const [y, m] = period.split("-").map(Number);
+  return `1-${clientNo}/${m}-${y}`;
+}
+
+/** The scheme change month: from 2026-08 the invoice's legal number uses the internal ref (SM-87). */
+export const NEW_NUMBERING_FROM = "2026-08";
+
 export function isValidPeriod(period: string): boolean {
   return /^\d{4}-\d{2}$/.test(period);
 }

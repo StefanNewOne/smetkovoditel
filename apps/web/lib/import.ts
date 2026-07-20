@@ -16,17 +16,19 @@ export interface StatementRow {
   integrityOk: boolean;
 }
 
+export interface ChargeOption {
+  id: string;
+  label: string; // "1-3/7-2026 · Client · остаток 12.000"
+}
+
 export interface QueueItem {
   id: string;
   title: string;
   amount: string | null;
   context: string;
-  classifiedAs?: string; // for statement-line items: CLIENT_PAYMENT lines are manually matchable
-}
-
-export interface ChargeOption {
-  id: string;
-  label: string; // "1-3/7-2026 · Client · остаток 12.000"
+  classifiedAs?: string; // for statement-line items
+  direction?: "IN" | "OUT";
+  suggestion?: ChargeOption; // an open charge whose total exactly equals this incoming payment
 }
 
 const d0 = (n: number) => formatMKD(n, { decimals: 0 });
@@ -35,14 +37,21 @@ const dt = (d: Date) =>
 
 /** Import center data: statements + the 4 attention queues (§9.4). */
 export async function getImportCenter() {
-  const [statements, qLines, qReceipts, qFacebk, qPartial, qFailed] = await Promise.all([
+  const [statements, qPayments, qLines, qReceipts, qFacebk, qPartial, qFailed] = await Promise.all([
     prisma.bankStatementImport.findMany({
       orderBy: { statementNumber: "desc" },
       take: 20,
       include: { _count: { select: { lines: true } } },
     }),
+    // Incoming bank payments not yet matched to a charge (client paid, maybe without a повик).
     prisma.statementLine.findMany({
-      where: { processed: false, classifiedAs: { in: ["CARD_TX", "OTHER", "CLIENT_PAYMENT"] } },
+      where: { processed: false, direction: "IN" },
+      orderBy: { amount: "desc" },
+      take: 200,
+    }),
+    // Outgoing lines that did not auto-categorize (fees / uncategorized card) — noise to resolve.
+    prisma.statementLine.findMany({
+      where: { processed: false, direction: "OUT", classifiedAs: { in: ["CARD_TX", "OTHER"] } },
       orderBy: { date: "desc" },
       take: 50,
     }),
@@ -66,10 +75,19 @@ export async function getImportCenter() {
     orderBy: { seqInMonth: "desc" },
     take: 100,
   });
-  const openCharges: ChargeOption[] = open.map((c) => ({
+  const optionOf = (c: (typeof open)[number]): ChargeOption => ({
     id: c.id,
     label: `${c.invoiceNumber} · ${c.client.name} · остаток ${d0(c.total - c.paidAmount)}`,
-  }));
+  });
+  const openCharges: ChargeOption[] = open.map(optionOf);
+  // Suggest by amount: an incoming payment whose value EXACTLY equals a single open charge's total
+  // is very likely that invoice (client paid without a повик). A suggestion only — human confirms.
+  const openByTotal = new Map<number, typeof open>();
+  for (const c of open) {
+    const list = openByTotal.get(c.total) ?? [];
+    list.push(c);
+    openByTotal.set(c.total, list);
+  }
 
   const statementRows: StatementRow[] = statements.map((s) => ({
     id: s.id,
@@ -85,12 +103,24 @@ export async function getImportCenter() {
     integrityOk: s.status === "PARSED" && s._count.lines === s.orderCount,
   }));
 
+  const payments: QueueItem[] = qPayments.map((l) => {
+    const exact = openByTotal.get(l.amount);
+    return {
+      id: l.id,
+      title: l.reference ? `Уплата (повик ${l.reference})` : "Уплата без повик",
+      amount: `+${d0(l.amount)}`,
+      context: l.counterpartyAccount ?? l.description ?? "",
+      direction: "IN" as const,
+      suggestion: exact && exact.length === 1 ? optionOf(exact[0]!) : undefined,
+    };
+  });
   const lines: QueueItem[] = qLines.map((l) => ({
     id: l.id,
     title: l.description || l.classifiedAs || "Извод-линија",
-    amount: `${l.direction === "IN" ? "+" : "−"}${d0(l.amount)}`,
-    context: `${l.classifiedAs ?? "?"} · ${l.reference ?? l.counterpartyAccount ?? ""}`,
+    amount: `−${d0(l.amount)}`,
+    context: `${l.classifiedAs ?? "?"} · ${l.counterpartyAccount ?? ""}`,
     classifiedAs: l.classifiedAs ?? undefined,
+    direction: "OUT" as const,
   }));
   const receipts: QueueItem[] = qReceipts.map((r) => ({
     id: r.id,
@@ -119,5 +149,9 @@ export async function getImportCenter() {
     })),
   ];
 
-  return { statements: statementRows, queues: { lines, receipts, facebk, partial }, openCharges };
+  return {
+    statements: statementRows,
+    queues: { payments, lines, receipts, facebk, partial },
+    openCharges,
+  };
 }

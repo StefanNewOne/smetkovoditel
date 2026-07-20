@@ -7,6 +7,7 @@ import type { ChargeOption, QueueItem, StatementRow } from "@/lib/import";
 import { ignoreLineAction, manualMatchAction, rematchAction, uploadAction } from "./actions";
 
 interface Queues {
+  payments: QueueItem[];
   lines: QueueItem[];
   receipts: QueueItem[];
   facebk: QueueItem[];
@@ -128,6 +129,13 @@ export function ImportView({
           </button>
         </div>
         <Queue
+          title="Уплати за спарување"
+          items={queues.payments}
+          openCharges={openCharges}
+          pending={pending}
+          onMatch={(lineId, chargeId) => resolve(() => manualMatchAction(lineId, chargeId))}
+        />
+        <Queue
           title="Извод-линии за решавање"
           items={queues.lines}
           openCharges={openCharges}
@@ -213,8 +221,9 @@ function QueueRow({
   onIgnore?: (lineId: string) => void;
 }) {
   const [chargeId, setChargeId] = useState("");
-  const isClientPayment = item.classifiedAs === "CLIENT_PAYMENT";
-  const canResolve = !!onMatch; // only the statement-lines queue passes handlers
+  // Matchable = an incoming payment (or a legacy CLIENT_PAYMENT line). OUT noise → ignore only.
+  const matchable =
+    !!onMatch && (item.direction === "IN" || item.classifiedAs === "CLIENT_PAYMENT");
 
   return (
     <div className="rounded-md bg-inset px-2.5 py-1.5 text-[12px]">
@@ -223,39 +232,51 @@ function QueueRow({
         {item.amount && <span className="font-semibold text-muted">{item.amount}</span>}
         <span className="max-w-[40%] truncate text-[11px] text-muted-2">{item.context}</span>
       </div>
-      {canResolve && (
+
+      {/* One-click suggestion: an open invoice whose total exactly matches this incoming payment. */}
+      {matchable && item.suggestion && (
+        <button
+          onClick={() => onMatch?.(item.id, item.suggestion!.id)}
+          disabled={pending}
+          className="mt-1.5 w-full truncate rounded bg-success-50 px-2 py-1 text-left text-[11px] font-bold text-success-700 hover:bg-success-100 disabled:opacity-40"
+        >
+          ✓ Спари: {item.suggestion.label}
+        </button>
+      )}
+
+      {matchable && (
         <div className="mt-1.5 flex items-center gap-1.5">
-          {isClientPayment ? (
-            <>
-              <select
-                value={chargeId}
-                onChange={(e) => setChargeId(e.target.value)}
-                className="min-w-0 flex-1 rounded border border-input bg-surface px-1.5 py-1 text-[11px]"
-              >
-                <option value="">Избери фактура…</option>
-                {(openCharges ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={() => chargeId && onMatch?.(item.id, chargeId)}
-                disabled={pending || !chargeId}
-                className="rounded bg-accent px-2 py-1 text-[11px] font-bold text-white disabled:opacity-40"
-              >
-                Спари
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={() => onIgnore?.(item.id)}
-              disabled={pending}
-              className="rounded border border-border px-2 py-1 text-[11px] font-semibold text-muted hover:bg-chip disabled:opacity-40"
-            >
-              Игнорирај
-            </button>
-          )}
+          <select
+            value={chargeId}
+            onChange={(e) => setChargeId(e.target.value)}
+            className="min-w-0 flex-1 rounded border border-input bg-surface px-1.5 py-1 text-[11px]"
+          >
+            <option value="">{item.suggestion ? "…или друга фактура" : "Избери фактура…"}</option>
+            {(openCharges ?? []).map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => chargeId && onMatch?.(item.id, chargeId)}
+            disabled={pending || !chargeId}
+            className="rounded bg-accent px-2 py-1 text-[11px] font-bold text-white disabled:opacity-40"
+          >
+            Спари
+          </button>
+        </div>
+      )}
+
+      {!matchable && onIgnore && (
+        <div className="mt-1.5">
+          <button
+            onClick={() => onIgnore?.(item.id)}
+            disabled={pending}
+            className="rounded border border-border px-2 py-1 text-[11px] font-semibold text-muted hover:bg-chip disabled:opacity-40"
+          >
+            Игнорирај
+          </button>
         </div>
       )}
     </div>

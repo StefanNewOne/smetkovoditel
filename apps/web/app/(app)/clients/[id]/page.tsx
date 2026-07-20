@@ -42,7 +42,7 @@ export default async function ClientProfile({ params }: { params: Promise<{ id: 
         <ArrowLeft size={14} /> Клиенти
       </Link>
 
-      <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 320px" }}>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
         {/* Left column */}
         <div className="flex flex-col gap-4">
           <div className="rounded-xl border border-border bg-surface p-6">

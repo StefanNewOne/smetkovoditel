@@ -37,7 +37,7 @@ export default async function ReportsPage({
         />
       </div>
 
-      <div className="grid gap-4" style={{ gridTemplateColumns: "1.3fr 1fr" }}>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr]">
         {/* Margin per client */}
         <div className="rounded-xl border border-border bg-surface p-6">
           <h3 className="mb-4 text-[14px] font-extrabold text-ink">Маргина по клиент</h3>

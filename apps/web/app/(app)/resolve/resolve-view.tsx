@@ -50,7 +50,7 @@ export function ResolveView({
         {msg && <span className="rounded-md bg-inset px-3 py-1.5 text-[12px] text-ink">{msg}</span>}
       </div>
 
-      <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1fr" }}>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Уплати за спарување */}
         <section className="rounded-xl border border-border bg-surface p-5">
           <div className="mb-3 flex items-center justify-between">

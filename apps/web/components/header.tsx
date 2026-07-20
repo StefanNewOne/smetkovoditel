@@ -11,10 +11,10 @@ export function Header() {
   const title = item?.label ?? "Финансиски систем";
 
   return (
-    <header className="flex h-[60px] shrink-0 items-center gap-3.5 border-b border-border bg-surface px-7">
-      <h1 className="text-[16px] font-extrabold text-ink">{title}</h1>
+    <header className="flex h-[60px] shrink-0 items-center gap-3.5 border-b border-border bg-surface px-4 md:px-7">
+      <h1 className="truncate text-[16px] font-extrabold text-ink">{title}</h1>
       <div className="ml-auto flex items-center gap-2.5">
-        <span className="rounded-lg bg-chip px-3 py-1.5 text-[12px] font-semibold text-muted">
+        <span className="hidden rounded-lg bg-chip px-3 py-1.5 text-[12px] font-semibold text-muted sm:inline-flex">
           Gmail sync · пред 4 мин
         </span>
         <Link

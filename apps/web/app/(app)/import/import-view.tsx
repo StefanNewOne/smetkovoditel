@@ -36,7 +36,7 @@ export function ImportView({ statements, queues }: { statements: StatementRow[];
   const toResolve = queues.payments.length + queues.lines.length;
 
   return (
-    <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1fr" }}>
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {/* Left: upload + statements */}
       <div className="flex flex-col gap-4">
         <div className="rounded-xl border border-border bg-surface p-5">

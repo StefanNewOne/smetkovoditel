@@ -41,7 +41,7 @@ export function ContractorsView({
         </div>
       )}
 
-      <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1.3fr" }}>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1.3fr]">
         {/* Register */}
         <div className="rounded-xl border border-border bg-surface p-5">
           <div className="mb-3 flex items-center justify-between">

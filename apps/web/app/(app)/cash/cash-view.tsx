@@ -241,6 +241,23 @@ function CollectModal({
       </label>
 
       {client && (
+        <div className="mt-3 flex gap-2 text-[12px]">
+          <div className="flex-1 rounded-lg bg-inset px-3 py-2">
+            <span className="block text-[11px] text-muted-2">Должи</span>
+            <span className="font-extrabold text-danger">
+              {formatMKD(client.totalOwed, { decimals: 0 })} ден
+            </span>
+          </div>
+          <div className="flex-1 rounded-lg bg-inset px-3 py-2">
+            <span className="block text-[11px] text-muted-2">Платено</span>
+            <span className="font-extrabold text-success-700">
+              {formatMKD(client.totalPaid, { decimals: 0 })} ден
+            </span>
+          </div>
+        </div>
+      )}
+
+      {client && (
         <label className="mt-3 block text-[12px] font-semibold text-muted">
           Задолжување
           <select

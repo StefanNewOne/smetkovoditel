@@ -326,21 +326,52 @@ export async function approveCashObligation(chargeId: string, userId: string) {
   });
 }
 
-/** SM-89 — delete an unneeded DRAFT charge. Safe: a draft has no assigned number (B1: the counter
- *  is not consumed until issuance) and no payments. Only DRAFT; period-guarded (B9); audited. */
-export async function deleteDraftCharge(chargeId: string, userId: string) {
+/** SM-89 — delete a charge (DRAFT, an OPEN cash obligation, or an invoice approved by mistake).
+ *  Frees any bank statement lines its payments occupied (re-matchable), unbinds billed expenses and
+ *  credit-note links, then removes the charge. Period-guarded (B9 — closed period rejected), audited.
+ *  Note: deleting an issued invoice leaves a gap in the fiscal counter (owner-accepted; the UI
+ *  double-confirms). Cash ledger entries from cash receipts are left intact (the cash was received). */
+export async function deleteCharge(chargeId: string, userId: string) {
   await prisma.$transaction(async (tx) => {
     const charge = await tx.charge.findUnique({ where: { id: chargeId } });
     if (!charge) throw new Error("Задолжувањето не постои.");
-    if (charge.status !== ChargeStatus.DRAFT)
-      throw new Error("Само ДРАФТ задолжување може да се избрише.");
     await assertPeriodOpen(tx, charge.period); // B9
+
+    const payments = await tx.payment.findMany({
+      where: { chargeId },
+      select: { id: true, statementLineId: true },
+    });
+    const slIds = payments.map((p) => p.statementLineId).filter((x): x is string => !!x);
+    if (slIds.length)
+      await tx.statementLine.updateMany({
+        where: { id: { in: slIds } },
+        data: { processed: false, linkedType: null, linkedId: null },
+      });
+
+    const lines = await tx.chargeLine.findMany({ where: { chargeId }, select: { id: true } });
+    const lineIds = lines.map((l) => l.id);
+    if (lineIds.length)
+      await tx.expense.updateMany({
+        where: { billedOnLineId: { in: lineIds } },
+        data: { billedOnLineId: null },
+      });
+    await tx.charge.updateMany({
+      where: { relatedChargeId: chargeId },
+      data: { relatedChargeId: null },
+    });
+
+    await tx.payment.deleteMany({ where: { chargeId } });
     await tx.chargeLine.deleteMany({ where: { chargeId } });
     await writeAudit(tx, {
       entity: "Charge",
       entityId: chargeId,
-      action: "delete.draft",
-      diff: { clientId: charge.clientId, period: charge.period, total: charge.total },
+      action: "delete",
+      diff: {
+        kind: charge.kind,
+        status: charge.status,
+        invoiceNumber: charge.invoiceNumber,
+        total: charge.total,
+      },
       userId,
     });
     await tx.charge.delete({ where: { id: chargeId } });

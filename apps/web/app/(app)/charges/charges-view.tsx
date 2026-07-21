@@ -12,7 +12,7 @@ import {
   closePeriodAction,
   collectCashOnChargeAction,
   creditNote,
-  deleteDraftAction,
+  deleteChargeAction,
   matchInvoiceLineAction,
   runW1,
 } from "./actions";
@@ -53,6 +53,14 @@ export function ChargesView({
   const [cnFor, setCnFor] = useState<ChargeRow | null>(null);
   const [payFor, setPayFor] = useState<ChargeRow | null>(null);
   const [cashFor, setCashFor] = useState<ChargeRow | null>(null);
+  const [delFor, setDelFor] = useState<ChargeRow | null>(null);
+
+  const deleteNow = (c: ChargeRow) =>
+    run(async () => {
+      const r = await deleteChargeAction(c.id);
+      setDelFor(null);
+      if (!r.ok) setMsg(r.error);
+    });
 
   const go = (p: string) => router.push(`/charges?period=${p}`);
   const run = (fn: () => Promise<void>) => {
@@ -76,11 +84,8 @@ export function ChargesView({
           r.ok ? (r.invoiceNumber ? `Фактура ${r.invoiceNumber} издадена.` : "Одобрено.") : r.error,
         );
       }),
-    onDelete: (c: ChargeRow) =>
-      run(async () => {
-        const r = await deleteDraftAction(c.id);
-        if (!r.ok) setMsg(r.error);
-      }),
+    // Issued invoice (has a number) → double-confirm; drafts / cash obligations delete directly.
+    onDelete: (c: ChargeRow) => (c.invoiceNumber ? setDelFor(c) : deleteNow(c)),
     onPay: (c: ChargeRow) => setPayFor(c),
     onCollect: (c: ChargeRow) => setCashFor(c),
     onCreditNote: (c: ChargeRow) => setCnFor(c),
@@ -259,7 +264,45 @@ export function ChargesView({
           }
         />
       )}
+
+      {delFor && (
+        <Modal title="Избриши издадена фактура" onClose={() => setDelFor(null)}>
+          <p className="mb-4 text-[12.5px] text-muted">
+            Ќе ја избришеш издадената фактура <b>{delFor.invoiceNumber}</b> (
+            {formatMKD(delFor.total, { decimals: 0 })} ден). Ова остава празнина во низата на броеви
+            — направи го само ако фактурата е одобрена по грешка. Уплатите се ослободуваат за
+            повторно спарување.
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setDelFor(null)}
+              className="rounded-md border border-border px-4 py-2 text-[12px] font-bold text-muted hover:bg-inset"
+            >
+              Откажи
+            </button>
+            <button
+              disabled={pending}
+              onClick={() => deleteNow(delFor)}
+              className="rounded-md bg-danger px-5 py-2 text-[13px] font-bold text-white hover:opacity-90 disabled:opacity-40"
+            >
+              Избриши трајно
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
+  );
+}
+
+function DeleteBtn({ actions, c }: { actions: RowActions; c: ChargeRow }) {
+  return (
+    <button
+      onClick={() => actions.onDelete(c)}
+      disabled={actions.pending || actions.closed}
+      className="text-[12px] font-bold text-danger hover:underline disabled:opacity-40"
+    >
+      Избриши
+    </button>
   );
 }
 
@@ -387,7 +430,10 @@ function ChargeSection({
                   </button>
                 </>
               ) : c.status === "PAID" ? (
-                <span className="text-[12px] font-bold text-success-700">✓ Платено</span>
+                <>
+                  <span className="text-[12px] font-bold text-success-700">✓ Платено</span>
+                  <DeleteBtn actions={actions} c={c} />
+                </>
               ) : isInvoice && c.kind === "INVOICE" ? (
                 <>
                   <button
@@ -404,15 +450,19 @@ function ChargeSection({
                   >
                     Одобрение
                   </button>
+                  <DeleteBtn actions={actions} c={c} />
                 </>
               ) : !isInvoice ? (
-                <button
-                  onClick={() => actions.onCollect(c)}
-                  disabled={actions.pending || actions.closed}
-                  className="rounded-[7px] bg-accent px-3 py-1.5 text-[12px] font-bold text-white hover:opacity-90 disabled:opacity-40"
-                >
-                  Наплата кеш
-                </button>
+                <>
+                  <button
+                    onClick={() => actions.onCollect(c)}
+                    disabled={actions.pending || actions.closed}
+                    className="rounded-[7px] bg-accent px-3 py-1.5 text-[12px] font-bold text-white hover:opacity-90 disabled:opacity-40"
+                  >
+                    Наплата кеш
+                  </button>
+                  <DeleteBtn actions={actions} c={c} />
+                </>
               ) : (
                 <span className="text-muted-2">—</span>
               )}

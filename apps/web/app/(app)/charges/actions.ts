@@ -9,7 +9,7 @@ import { assertPeriodOpen } from "@/lib/period-guard";
 import {
   approveCashObligation,
   approveInvoice,
-  deleteDraftCharge,
+  deleteCharge,
   generateCharges,
 } from "@/lib/workflows/w1";
 import { collectCash } from "@/lib/workflows/w3";
@@ -59,12 +59,12 @@ export async function approveCharge(chargeId: string): Promise<ApproveResult> {
   }
 }
 
-/** SM-89 — delete an unneeded DRAFT charge. */
-export async function deleteDraftAction(chargeId: string): Promise<SimpleResult> {
+/** SM-89 — delete a charge (draft, open cash obligation, or a mis-approved invoice). */
+export async function deleteChargeAction(chargeId: string): Promise<SimpleResult> {
   const auth = await requireWriter();
   if (!auth.ok) return auth;
   try {
-    await deleteDraftCharge(chargeId, auth.user.id);
+    await deleteCharge(chargeId, auth.user.id);
     revalidatePath("/charges");
     return { ok: true };
   } catch (e) {

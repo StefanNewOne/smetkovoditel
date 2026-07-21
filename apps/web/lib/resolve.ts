@@ -24,6 +24,7 @@ export interface PaymentItem {
   context: string;
   suggestedChargeId?: string; // open charge whose remaining balance exactly equals this payment
   suggestedClientId?: string; // client inferred from the payer (SM-82) — pre-selects the picker
+  suggestedClientName?: string; // shown so the user sees who paid (SM-90)
 }
 export interface ExpenseLineItem {
   id: string;
@@ -62,7 +63,7 @@ const norm = (s: string) =>
     .trim();
 
 export async function getResolveCenter() {
-  const [qPayments, qExpenses, clients, open, history] = await Promise.all([
+  const [qPayments, qExpenses, clients, open, history, giro] = await Promise.all([
     prisma.statementLine.findMany({
       where: { processed: false, direction: "IN" },
       orderBy: { amount: "desc" },
@@ -100,13 +101,19 @@ export async function getResolveCenter() {
       },
       select: { counterpartyAccount: true, payment: { select: { clientId: true } } },
     }),
+    // SM-90: explicit client giro accounts — the authoritative account → client mapping.
+    prisma.clientBankAccount.findMany({ select: { account: true, clientId: true } }),
   ]);
 
+  const clientNameById = new Map(clients.map((c) => [c.id, c.name] as const));
+  // account → client: giro accounts are authoritative (owner-entered); matched-payment history
+  // fills any gaps (learned).
   const accountToClient = new Map<string, string>();
   for (const h of history) {
     if (h.counterpartyAccount && h.payment?.clientId)
       accountToClient.set(h.counterpartyAccount, h.payment.clientId);
   }
+  for (const g of giro) accountToClient.set(g.account, g.clientId);
 
   const openCharges: ChargeOption[] = open.map((c) => ({
     id: c.id,
@@ -135,13 +142,15 @@ export async function getResolveCenter() {
       ? accountToClient.get(l.counterpartyAccount)
       : undefined;
     const byName = payer ? clientByNorm.get(norm(payer))?.id : undefined;
+    const clientId = byAccount ?? byName;
     return {
       id: l.id,
       amount: `+${d0(l.amount)}`,
       title: l.reference ? `Уплата (повик ${l.reference})` : "Уплата без повик",
       context: l.counterpartyAccount ?? payer ?? l.description ?? "",
       suggestedChargeId: exact && exact.length === 1 ? exact[0]!.id : undefined,
-      suggestedClientId: byAccount ?? byName,
+      suggestedClientId: clientId,
+      suggestedClientName: clientId ? clientNameById.get(clientId) : undefined,
     };
   });
 

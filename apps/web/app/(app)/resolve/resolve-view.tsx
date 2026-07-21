@@ -139,6 +139,11 @@ function PaymentRow({
         <span className="font-semibold text-success-700">{item.amount}</span>
       </div>
       {item.context && <p className="mt-0.5 truncate text-[11px] text-muted-2">{item.context}</p>}
+      {item.suggestedClientName && (
+        <p className="mt-0.5 text-[11px] font-bold text-success-700">
+          → {item.suggestedClientName}
+        </p>
+      )}
 
       {/* One-click: exact-amount match to a single open charge (client paid without a повик). */}
       {suggestion && (

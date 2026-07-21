@@ -13,6 +13,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "import", label: "Import центар", href: "/import", icon: "Download" },
   { key: "resolve", label: "Решавање", href: "/resolve", icon: "ListChecks" },
   { key: "cash", label: "Благајна", href: "/cash", icon: "Wallet" },
+  { key: "expenses", label: "Трошоци", href: "/expenses", icon: "Receipt" },
   { key: "contractors", label: "Хонорарци", href: "/contractors", icon: "Clapperboard" },
   { key: "reports", label: "Извештаи", href: "/reports", icon: "BarChart3" },
   { key: "settings", label: "Подесувања", href: "/settings", icon: "Settings" },

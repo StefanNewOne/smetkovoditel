@@ -2,16 +2,26 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { parseDenari } from "@smetko/shared";
-import type { EmployeeRow, PayrollRunRow } from "@/lib/settings";
-import { createEmployeeAction, runPayrollAction } from "./actions";
+import type { EmployeeRow, PayrollRunRow, VendorRuleRow } from "@/lib/settings";
+import {
+  addVendorRuleAction,
+  createEmployeeAction,
+  removeVendorRuleAction,
+  runPayrollAction,
+} from "./actions";
 
 interface Config {
   vat: string;
   vendorRules: number;
   bank: string;
   nextNumber: string;
+}
+
+interface CategoryOption {
+  value: string;
+  label: string;
 }
 
 function safeDeni(raw: string): number {
@@ -27,11 +37,15 @@ export function SettingsView({
   employees,
   runs,
   config,
+  vendorRules,
+  categories,
 }: {
   period: string;
   employees: EmployeeRow[];
   runs: PayrollRunRow[];
   config: Config;
+  vendorRules: VendorRuleRow[];
+  categories: CategoryOption[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -53,7 +67,7 @@ export function SettingsView({
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <ConfigCard label="ДДВ" value={config.vat} />
         <ConfigCard label="Банка и салда" value={config.bank} />
         <ConfigCard label="Следен фактурен број" value={config.nextNumber} />
@@ -61,6 +75,14 @@ export function SettingsView({
         <ConfigCard label="RBAC" value="admin (Кекиќ)" />
         <ConfigCard label="Ad акаунти" value="во клиент-профили" />
       </div>
+
+      <VendorRulesSection
+        rules={vendorRules}
+        categories={categories}
+        pending={pending}
+        onChanged={() => router.refresh()}
+        onError={(e) => setMsg(e)}
+      />
 
       {/* Payroll (плати) */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -209,6 +231,110 @@ function AddEmployeeModal({
             Додади
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function VendorRulesSection({
+  rules,
+  categories,
+  pending,
+  onChanged,
+  onError,
+}: {
+  rules: VendorRuleRow[];
+  categories: CategoryOption[];
+  pending: boolean;
+  onChanged: () => void;
+  onError: (e: string) => void;
+}) {
+  const [pattern, setPattern] = useState("");
+  const [category, setCategory] = useState("");
+  const [vendor, setVendor] = useState("");
+  const [busy, startTransition] = useTransition();
+  const disabled = pending || busy;
+
+  const add = () =>
+    startTransition(async () => {
+      const r = await addVendorRuleAction(pattern, category, vendor);
+      if (r.ok) {
+        setPattern("");
+        setVendor("");
+        setCategory("");
+        onChanged();
+      } else onError(r.error);
+    });
+
+  return (
+    <div className="rounded-xl border border-border bg-surface p-5">
+      <h3 className="mb-1 text-[14px] font-extrabold text-ink">
+        Правила за продавачи (авто-категоризација)
+      </h3>
+      <p className="mb-3 text-[12px] text-muted-2">
+        Кога описот на картичен трошок содржи шаблон, при увоз автоматски се категоризира (§4.2).
+      </p>
+
+      <div className="mb-3 flex flex-wrap items-end gap-2">
+        <input
+          value={pattern}
+          onChange={(e) => setPattern(e.target.value)}
+          placeholder="Шаблон (пр. PETROL)"
+          className="min-w-[140px] flex-1 rounded-md border border-input px-3 py-2 text-[13px]"
+        />
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          className="min-w-[140px] flex-1 rounded-md border border-input bg-surface px-3 py-2 text-[13px]"
+        >
+          <option value="">Категорија…</option>
+          {categories.map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+        <input
+          value={vendor}
+          onChange={(e) => setVendor(e.target.value)}
+          placeholder="Продавач (опц.)"
+          className="min-w-[120px] flex-1 rounded-md border border-input px-3 py-2 text-[13px]"
+        />
+        <button
+          onClick={add}
+          disabled={disabled || !pattern.trim() || !category}
+          className="rounded-md bg-accent px-4 py-2 text-[12.5px] font-bold text-white disabled:opacity-40"
+        >
+          Додади
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        {rules.length === 0 && <p className="text-[12.5px] text-muted-2">Нема правила.</p>}
+        {rules.map((r) => (
+          <div
+            key={r.id}
+            className="flex items-center gap-2 rounded-md bg-inset px-3 py-1.5 text-[12.5px]"
+          >
+            <span className="font-semibold text-ink">{r.pattern}</span>
+            <span className="text-muted-2">→ {r.categoryLabel}</span>
+            {r.vendor && <span className="text-muted-2">· {r.vendor}</span>}
+            <span className="ml-auto text-[11px] text-muted-2">{r.hits}×</span>
+            <button
+              onClick={() =>
+                startTransition(async () => {
+                  const res = await removeVendorRuleAction(r.id);
+                  if (res.ok) onChanged();
+                  else onError(res.error);
+                })
+              }
+              disabled={disabled}
+              className="text-muted-2 hover:text-danger disabled:opacity-40"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        ))}
       </div>
     </div>
   );

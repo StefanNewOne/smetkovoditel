@@ -1,11 +1,43 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { ExpenseCategory, prisma } from "@smetko/db";
 import { type CreateEmployeeInput, zCreateEmployee } from "@smetko/shared";
 import { requireWriter } from "@/lib/rbac";
 import { createEmployee, runPayroll } from "@/lib/workflows/payroll";
 
 export type Result = { ok: true } | { ok: false; error: string };
+
+/** SM-91 — add a vendor→category rule (pattern matched against the card merchant on import, §4.2). */
+export async function addVendorRuleAction(
+  pattern: string,
+  category: string,
+  vendor: string,
+): Promise<Result> {
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  const p = pattern.trim().toUpperCase();
+  if (p.length < 2) return { ok: false, error: "Шаблонот е прекратко." };
+  if (!(category in ExpenseCategory)) return { ok: false, error: "Непозната категорија." };
+  const existing = await prisma.vendorRule.findFirst({
+    where: { pattern: p, category: category as ExpenseCategory },
+  });
+  if (existing) return { ok: false, error: "Правилото веќе постои." };
+  await prisma.vendorRule.create({
+    data: { pattern: p, category: category as ExpenseCategory, vendor: vendor.trim() || null },
+  });
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+/** SM-91 — delete a vendor rule. */
+export async function removeVendorRuleAction(id: string): Promise<Result> {
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  await prisma.vendorRule.delete({ where: { id } });
+  revalidatePath("/settings");
+  return { ok: true };
+}
 
 export async function createEmployeeAction(input: CreateEmployeeInput): Promise<Result> {
   const auth = await requireWriter();

@@ -1,6 +1,7 @@
 import "server-only";
 import { currentPeriod, formatMKD, invoiceNumber } from "@smetko/shared";
 import { prisma } from "@smetko/db";
+import { CATEGORY_LABEL } from "@/lib/expenses";
 
 export interface EmployeeRow {
   id: string;
@@ -22,7 +23,7 @@ export async function getSettingsData() {
   const [employees, runs, vendorRules, bank, nextSeq] = await Promise.all([
     prisma.employee.findMany({ orderBy: { name: "asc" } }),
     prisma.payrollRun.findMany({ orderBy: { period: "desc" }, take: 12 }),
-    prisma.vendorRule.count(),
+    prisma.vendorRule.findMany({ orderBy: [{ hits: "desc" }, { pattern: "asc" }] }),
     prisma.bankAccount.findFirst(),
     prisma.charge.aggregate({
       where: { period, seqInMonth: { not: null } },
@@ -51,15 +52,34 @@ export async function getSettingsData() {
     };
   });
 
+  const vendorRuleRows = vendorRules.map((v) => ({
+    id: v.id,
+    pattern: v.pattern,
+    category: v.category as string,
+    categoryLabel: CATEGORY_LABEL[v.category] ?? v.category,
+    vendor: v.vendor,
+    hits: v.hits,
+  }));
+
   return {
     period,
     employees: employeeRows,
     runs: runRows,
+    vendorRules: vendorRuleRows,
     config: {
       vat: "18% (B11)",
-      vendorRules,
+      vendorRules: vendorRules.length,
       bank: bank ? `${bank.bank} · ${bank.accountNumber}` : "—",
       nextNumber: invoiceNumber((nextSeq._max.seqInMonth ?? 0) + 1, period),
     },
   };
+}
+
+export interface VendorRuleRow {
+  id: string;
+  pattern: string;
+  category: string;
+  categoryLabel: string;
+  vendor: string | null;
+  hits: number;
 }

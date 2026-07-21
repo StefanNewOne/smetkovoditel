@@ -22,19 +22,21 @@ export async function getClients(channel?: "INVOICE" | "CASH") {
     },
   });
 
-  return clients.map((c) => ({
-    id: c.id,
-    number: c.number,
-    name: c.name,
-    taxId: c.taxId,
-    paymentChannel: c.paymentChannel,
-    status: c.status,
-    creditBalance: c.creditBalance,
-    activePackage: c.packages.find((p) => p.effectiveTo === null) ?? c.packages[0] ?? null,
-    openAmount: c.charges.reduce((sum, ch) => sum + (ch.total - ch.paidAmount), 0),
-    hasMetaAds: c.lineTemplates.some((t) => t.type === "META_ADS"),
-    hasActors: c.lineTemplates.some((t) => t.type === "ACTORS"),
-  }));
+  return clients
+    .map((c) => ({
+      id: c.id,
+      number: c.number,
+      name: c.name,
+      taxId: c.taxId,
+      paymentChannel: c.paymentChannel,
+      status: c.status,
+      creditBalance: c.creditBalance,
+      activePackage: c.packages.find((p) => p.effectiveTo === null) ?? c.packages[0] ?? null,
+      openAmount: c.charges.reduce((sum, ch) => sum + (ch.total - ch.paidAmount), 0),
+      hasMetaAds: c.lineTemplates.some((t) => t.type === "META_ADS"),
+      hasActors: c.lineTemplates.some((t) => t.type === "ACTORS"),
+    }))
+    .sort((a, b) => (a.status === "ACTIVE" ? 0 : 1) - (b.status === "ACTIVE" ? 0 : 1));
 }
 
 /** One client with full profile data (package history, charges, extras). */

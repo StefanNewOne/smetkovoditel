@@ -40,7 +40,7 @@ export async function getImportCenter() {
   const [statements, qPayments, qLines, qReceipts, qFacebk, qPartial, qFailed] = await Promise.all([
     prisma.bankStatementImport.findMany({
       orderBy: { statementNumber: "desc" },
-      take: 20,
+      take: 400, // SM-93: show all statements (scrollable), not just the latest 20
       include: { _count: { select: { lines: true } } },
     }),
     // Incoming bank payments not yet matched to a charge (client paid, maybe without a повик).

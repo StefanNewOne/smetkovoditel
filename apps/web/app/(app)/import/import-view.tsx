@@ -71,11 +71,16 @@ export function ImportView({ statements, queues }: { statements: StatementRow[];
         </div>
 
         <div className="rounded-xl border border-border bg-surface p-5">
-          <h3 className="mb-3 text-[14px] font-extrabold text-ink">Изводи</h3>
+          <h3 className="mb-3 flex items-center gap-2 text-[14px] font-extrabold text-ink">
+            Изводи
+            <span className="rounded-[10px] bg-chip px-2 py-0.5 text-[11px] font-bold text-muted">
+              {statements.length}
+            </span>
+          </h3>
           {statements.length === 0 && (
             <p className="py-3 text-[13px] text-muted-2">Нема внесени изводи.</p>
           )}
-          <div className="flex flex-col gap-2">
+          <div className="flex max-h-[560px] flex-col gap-2 overflow-y-auto">
             {statements.map((s) => (
               <div key={s.id} className="rounded-lg border border-border-2 p-3 text-[12.5px]">
                 <div className="flex items-center gap-2">

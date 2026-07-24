@@ -1,5 +1,5 @@
 import "server-only";
-import { ExpenseCategory, MatchStatus, PayChannel, prisma } from "@smetko/db";
+import { MatchStatus, PayChannel, prisma } from "@smetko/db";
 import { writeAudit } from "@/lib/audit";
 
 /**
@@ -23,7 +23,7 @@ export async function mapAdAccount(metaAccountId: string, clientId: string | nul
     const receiptIds = receipts.map((r) => r.id);
     if (receiptIds.length) {
       await tx.expense.updateMany({
-        where: { category: ExpenseCategory.ADS, adSpendReceiptId: { in: receiptIds } },
+        where: { category: "ADS", adSpendReceiptId: { in: receiptIds } },
         data: { clientId, isBillable: clientId != null },
       });
     }
@@ -45,7 +45,7 @@ export async function bookFacebkLine(lineId: string, clientId: string | null, us
     if (!line || line.processed) throw new Error("Линијата не постои или е веќе решена.");
     const exp = await tx.expense.create({
       data: {
-        category: ExpenseCategory.ADS,
+        category: "ADS",
         vendor: "Meta",
         amount: line.amount, // MKD од изводот, 1:1 (D3)
         date: line.date,
@@ -103,7 +103,7 @@ export async function manualMatchReceipt(receiptId: string, lineId: string, user
     const clientId = adAccount?.clientId ?? null;
     const exp = await tx.expense.create({
       data: {
-        category: ExpenseCategory.ADS,
+        category: "ADS",
         vendor: "Meta",
         amount: line.amount,
         date: line.date,

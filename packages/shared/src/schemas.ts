@@ -96,7 +96,7 @@ export const zPayout = z.object({
 export type PayoutInput = z.infer<typeof zPayout>;
 
 // ── Mobile cash expense (W6) ─────────────────────────────────────────────────
-/** Cash-expense categories offered in the mobile form (subset of ExpenseCategory). */
+/** Cash-expense categories offered in the mobile form (a fixed subset of the system category keys). */
 export const zCashExpenseCategory = z.enum([
   "OPERATIONS",
   "FUEL",

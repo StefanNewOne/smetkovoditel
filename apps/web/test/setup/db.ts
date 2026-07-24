@@ -1,4 +1,4 @@
-import { prisma } from "@smetko/db";
+import { CATEGORY_SEED, prisma } from "@smetko/db";
 
 /**
  * Per-test DB isolation for the integration suite. resetDb() truncates every table (CASCADE,
@@ -14,6 +14,8 @@ export interface Baseline {
 }
 
 export async function seedBaseline(): Promise<Baseline> {
+  // Categories (SM-99) — truncated by resetDb, so re-seed before anything references them (FK).
+  await prisma.category.createMany({ data: CATEGORY_SEED, skipDuplicates: true });
   const user = await prisma.user.create({
     data: {
       name: "Тест Корисник",

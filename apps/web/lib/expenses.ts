@@ -2,6 +2,12 @@ import "server-only";
 import { formatMKD } from "@smetko/shared";
 import { prisma } from "@smetko/db";
 
+/** True if `key` is a known, active category (SM-99 — categories are data, validated at runtime). */
+export async function categoryExists(key: string): Promise<boolean> {
+  return (await prisma.category.count({ where: { key, active: true } })) > 0;
+}
+
+/** Default labels for the seeded categories — fallback when a DB label isn't loaded. */
 export const CATEGORY_LABEL: Record<string, string> = {
   OPERATIONS: "Оперативни",
   ADS: "Реклами (Meta)",

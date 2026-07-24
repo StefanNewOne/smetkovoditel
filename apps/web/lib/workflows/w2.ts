@@ -3,7 +3,6 @@ import {
   ChargeKind,
   ChargeStatus,
   Direction,
-  ExpenseCategory,
   type ImportSource,
   MatchStatus,
   PayChannel,
@@ -534,7 +533,7 @@ export async function runMatching(userId: string): Promise<number> {
 
       const expense = await tx.expense.create({
         data: {
-          category: ExpenseCategory.ADS,
+          category: "ADS",
           vendor: "Meta",
           amount: line.amount, // MKD from the statement, 1:1 (D3)
           date: line.date,
@@ -670,7 +669,7 @@ const periodOfDate = (d: Date) =>
  */
 export async function categorizeStatementLine(
   lineId: string,
-  category: ExpenseCategory,
+  category: string, // Category.key (SM-99)
   opts: { rememberVendor?: boolean },
   userId: string,
 ): Promise<CategorizeResult> {

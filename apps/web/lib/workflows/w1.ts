@@ -1,13 +1,5 @@
 import "server-only";
-import {
-  ChargeKind,
-  ChargeStatus,
-  ClientStatus,
-  ExpenseCategory,
-  LineType,
-  Prisma,
-  prisma,
-} from "@smetko/db";
+import { ChargeKind, ChargeStatus, ClientStatus, LineType, Prisma, prisma } from "@smetko/db";
 import {
   addDays,
   internalRef,
@@ -107,8 +99,7 @@ export async function generateCharges(
 
       for (const tpl of client.lineTemplates) {
         if (tpl.type === LineType.META_ADS || tpl.type === LineType.ACTORS) {
-          const category =
-            tpl.type === LineType.META_ADS ? ExpenseCategory.ADS : ExpenseCategory.ACTORS;
+          const category = tpl.type === LineType.META_ADS ? "ADS" : "ACTORS";
           const expenses = await tx.expense.findMany({
             where: { clientId: client.id, isBillable: true, billedOnLineId: null, category },
           });

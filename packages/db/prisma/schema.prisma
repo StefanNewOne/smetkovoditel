@@ -85,21 +85,25 @@ enum CashDocType {
   KASA_ISPLATI
 }
 
-enum ExpenseCategory {
-  OPERATIONS
-  ADS
-  ACTORS
-  EQUIPMENT
-  FUEL
-  RENT
-  UTILITIES
-  PHONE
-  BANK_FEES
-  SALARY
-  HONORAR
-  REPRESENTATION // кафани / ресторани / угостителство
-  MARKETING // маркетинг (не-Meta)
-  OTHER
+// Expense categories are data (SM-99): the owner can add/rename custom categories. System categories
+// (ADS/ACTORS/SALARY/HONORAR/BANK_FEES) carry billing/payroll/report logic — their `key` is immutable
+// and they cannot be deleted; only the label is editable. `kind` keeps P&L grouping stable.
+enum CategoryKind {
+  OPERATING
+  BILLABLE // pass-through to a client invoice (ADS/ACTORS — B15/B16)
+  PAYROLL
+  BANK
+}
+
+model Category {
+  key         String       @id // stable code, e.g. "ADS" — referenced by Expense/VendorRule
+  label       String // Macedonian display label (editable)
+  system      Boolean      @default(false) // load-bearing: key immutable, undeletable
+  kind        CategoryKind @default(OPERATING)
+  sortOrder   Int          @default(0)
+  active      Boolean      @default(true)
+  expenses    Expense[]
+  vendorRules VendorRule[]
 }
 
 enum ContractorType {
@@ -286,7 +290,8 @@ model CashLedgerEntry {
 // ============ EXPENSES ============
 model Expense {
   id                  String             @id @default(cuid())
-  category            ExpenseCategory
+  category            String // Category.key (SM-99); FK below
+  categoryRef         Category           @relation(fields: [category], references: [key], onDelete: Restrict)
   vendor              String?
   amount              Int
   vatAmount           Int?
@@ -413,11 +418,12 @@ model StatementLine {
 }
 
 model VendorRule {
-  id       String          @id @default(cuid())
-  pattern  String
-  category ExpenseCategory
-  vendor   String?
-  hits     Int             @default(0)
+  id          String   @id @default(cuid())
+  pattern     String
+  category    String // Category.key (SM-99)
+  categoryRef Category @relation(fields: [category], references: [key], onDelete: Restrict)
+  vendor      String?
+  hits        Int      @default(0)
 }
 
 model ExchangeRate {

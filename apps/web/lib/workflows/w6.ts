@@ -1,5 +1,5 @@
 import "server-only";
-import { CashDocType, Direction, type ExpenseCategory, PayChannel, prisma } from "@smetko/db";
+import { CashDocType, Direction, PayChannel, prisma } from "@smetko/db";
 import { type CashExpenseInput, currentPeriod } from "@smetko/shared";
 import { writeAudit } from "@/lib/audit";
 import { assertPeriodOpen } from "@/lib/period-guard";
@@ -44,7 +44,7 @@ export async function recordCashExpense(
 
     await tx.expense.create({
       data: {
-        category: input.category as ExpenseCategory,
+        category: input.category,
         vendor: input.vendor || null,
         amount: input.amount,
         date: new Date(),

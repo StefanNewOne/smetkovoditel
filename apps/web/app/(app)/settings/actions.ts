@@ -1,8 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { ExpenseCategory, prisma } from "@smetko/db";
+import { prisma } from "@smetko/db";
 import { type CreateEmployeeInput, zCreateEmployee } from "@smetko/shared";
+import { categoryExists } from "@/lib/expenses";
 import { requireWriter } from "@/lib/rbac";
 import { createEmployee, runPayroll } from "@/lib/workflows/payroll";
 
@@ -18,13 +19,11 @@ export async function addVendorRuleAction(
   if (!auth.ok) return auth;
   const p = pattern.trim().toUpperCase();
   if (p.length < 2) return { ok: false, error: "Шаблонот е прекратко." };
-  if (!(category in ExpenseCategory)) return { ok: false, error: "Непозната категорија." };
-  const existing = await prisma.vendorRule.findFirst({
-    where: { pattern: p, category: category as ExpenseCategory },
-  });
+  if (!(await categoryExists(category))) return { ok: false, error: "Непозната категорија." };
+  const existing = await prisma.vendorRule.findFirst({ where: { pattern: p, category } });
   if (existing) return { ok: false, error: "Правилото веќе постои." };
   await prisma.vendorRule.create({
-    data: { pattern: p, category: category as ExpenseCategory, vendor: vendor.trim() || null },
+    data: { pattern: p, category, vendor: vendor.trim() || null },
   });
   revalidatePath("/settings");
   return { ok: true };

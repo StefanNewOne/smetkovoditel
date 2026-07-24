@@ -1,12 +1,5 @@
 import "server-only";
-import {
-  CashDocType,
-  Direction,
-  ExpenseCategory,
-  PayChannel,
-  type Prisma,
-  prisma,
-} from "@smetko/db";
+import { CashDocType, Direction, PayChannel, type Prisma, prisma } from "@smetko/db";
 import {
   type CalcHonorarInput,
   type PayoutInput,
@@ -124,7 +117,7 @@ export async function payoutHonorar(input: PayoutInput, userId: string) {
         if (!alloc.billable) continue;
         await tx.expense.create({
           data: {
-            category: ExpenseCategory.ACTORS,
+            category: "ACTORS",
             vendor: contractor.name,
             amount: alloc.amount, // allocated BRUTO (Master Plan §5)
             date: new Date(),

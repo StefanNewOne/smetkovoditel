@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { ExpenseCategory } from "@smetko/db";
+import { categoryExists } from "@/lib/expenses";
 import { requireWriter } from "@/lib/rbac";
 import {
   categorizeStatementLine,
@@ -45,14 +45,9 @@ export async function categorizeLineAction(
 ): Promise<ActionResult> {
   const auth = await requireWriter();
   if (!auth.ok) return auth;
-  if (!(category in ExpenseCategory)) return { ok: false, error: "Непозната категорија." };
+  if (!(await categoryExists(category))) return { ok: false, error: "Непозната категорија." };
   try {
-    const r = await categorizeStatementLine(
-      lineId,
-      category as ExpenseCategory,
-      { rememberVendor },
-      auth.user.id,
-    );
+    const r = await categorizeStatementLine(lineId, category, { rememberVendor }, auth.user.id);
     const detail = r.learnedRule
       ? `Запаметен продавач${r.siblingMatches > 0 ? ` · +${r.siblingMatches} слични на увоз` : ""}`
       : undefined;

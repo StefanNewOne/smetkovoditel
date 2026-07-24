@@ -54,3 +54,6 @@ _import/*
 # Real source data dropped in root for import (NEVER commit — real financial PII)
 /Фактури/
 /Фактури*.csv
+
+# Derived real financial data (FACEBK charges without receipts)
+FACEBK-*.csv

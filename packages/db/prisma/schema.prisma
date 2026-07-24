@@ -222,7 +222,10 @@ model Charge {
   payments        Payment[]
   pdfUrl          String?
 
-  @@unique([clientId, period, kind])
+  // B12 relaxed (owner decision): multiple invoices per client per month are allowed. W1 still
+  // generates the recurring charge once per (client, period, kind) via a findFirst idempotency guard;
+  // extra invoices are added manually / by import.
+  @@index([clientId, period, kind])
   @@unique([seqInMonth, period])
 }
 

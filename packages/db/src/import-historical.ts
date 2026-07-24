@@ -187,8 +187,8 @@ export async function importHistorical(
     const clientId = clientIdByName.get(ch.clientName)!;
     const client = clientByName.get(ch.clientName)!;
     const kind = client.channel === "INVOICE" ? "INVOICE" : "CASH_OBLIGATION";
-    const existing = await db.charge.findUnique({
-      where: { clientId_period_kind: { clientId, period: ch.period, kind } },
+    const existing = await db.charge.findFirst({
+      where: { clientId, period: ch.period, kind },
     });
     if (existing) {
       report.chargesSkipped++;

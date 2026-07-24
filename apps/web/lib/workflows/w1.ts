@@ -55,8 +55,10 @@ export async function generateCharges(
     const kind =
       client.paymentChannel === "INVOICE" ? ChargeKind.INVOICE : ChargeKind.CASH_OBLIGATION;
 
-    const existing = await prisma.charge.findUnique({
-      where: { clientId_period_kind: { clientId: client.id, period, kind } },
+    // B12 relaxed: multiple invoices per month allowed. W1 still generates the recurring charge
+    // once — skip if one already exists for (client, period, kind). Extra invoices are added manually.
+    const existing = await prisma.charge.findFirst({
+      where: { clientId: client.id, period, kind },
     });
     if (existing) {
       skipped++;

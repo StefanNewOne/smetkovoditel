@@ -27,8 +27,14 @@ export function ImportView({ statements, queues }: { statements: StatementRow[];
     for (const f of Array.from(files)) fd.append("files", f);
     setSummary([]);
     startTransition(async () => {
-      const r = await uploadAction(fd);
-      setSummary(r.ok ? r.summary : [r.error]);
+      try {
+        const r = await uploadAction(fd);
+        setSummary(r.ok ? r.summary : [r.error]);
+      } catch {
+        setSummary([
+          "Датотеките се преголеми за еден upload. Прикачи помалку одеднаш (пр. по 50–100 PDF-и).",
+        ]);
+      }
       router.refresh();
     });
   }

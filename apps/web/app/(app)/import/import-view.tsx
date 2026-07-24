@@ -137,9 +137,28 @@ export function ImportView({ statements, queues }: { statements: StatementRow[];
           </span>
         </Link>
 
+        <Link
+          href="/meta"
+          className="flex items-center justify-between rounded-xl border border-accent-300 bg-accent-50 p-4 hover:bg-accent-200"
+        >
+          <div>
+            <h3 className="text-[14px] font-extrabold text-accent">META Реклами</h3>
+            <p className="text-[12px] text-muted">
+              {queues.facebk.length} FACEBK без receipt · {queues.receipts.length} фактури без
+              линија
+            </p>
+          </div>
+          <span className="flex items-center gap-1.5 text-[13px] font-bold text-accent">
+            {queues.facebk.length + queues.receipts.length > 0 && (
+              <span className="rounded-[10px] bg-danger-50 px-2 py-0.5 text-[11px] text-danger">
+                {queues.facebk.length + queues.receipts.length}
+              </span>
+            )}
+            <ArrowRight size={16} />
+          </span>
+        </Link>
+
         <h3 className="text-[14px] font-extrabold text-ink">Редици за внимание</h3>
-        <Queue title="Receipts без линија" items={queues.receipts} />
-        <Queue title="FACEBK без receipt (аларм)" items={queues.facebk} danger />
         <Queue title="PARTIAL / FAILED" items={queues.partial} danger />
       </div>
     </div>

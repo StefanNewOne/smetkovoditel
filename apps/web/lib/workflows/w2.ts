@@ -1,11 +1,13 @@
 import "server-only";
 import {
+  ChargeKind,
   ChargeStatus,
   Direction,
   ExpenseCategory,
   type ImportSource,
   MatchStatus,
   PayChannel,
+  Prisma,
   prisma,
 } from "@smetko/db";
 import pino from "pino";
@@ -53,6 +55,120 @@ export type StatementIngest =
  * persist lines + classify → auto-book CLIENT_PAYMENT to charges; META_ADS lines await matching.
  */
 /** Ingest from a PDF buffer using the column-aware positional parser (real statements). */
+/**
+ * FIFO settlement (go-live Part 2B) — an incoming payment with no matched повикување is applied to
+ * the payer's OLDEST open invoice, the payer identified by the giro account (ClientBankAccount), so
+ * payments don't pile up in Решавање. Overpayment → creditBalance (B18); if the client has no open
+ * invoice the whole amount goes to credit. Closed-period invoices are never touched (B9). Runs
+ * inside the caller's transaction; returns true if it settled the line.
+ */
+async function settleOldestByAccount(
+  tx: Prisma.TransactionClient,
+  lineId: string,
+  amount: number,
+  date: Date,
+  reference: string | null,
+  userId: string,
+): Promise<boolean> {
+  const line = await tx.statementLine.findUnique({ where: { id: lineId } });
+  if (!line || line.processed || !line.counterpartyAccount) return false;
+  const acc = await tx.clientBankAccount.findUnique({
+    where: { account: line.counterpartyAccount },
+  });
+  if (!acc) return false;
+
+  const charge = await tx.charge.findFirst({
+    where: {
+      clientId: acc.clientId,
+      kind: ChargeKind.INVOICE,
+      invoiceNumber: { not: null },
+      status: { in: [ChargeStatus.OPEN, ChargeStatus.PARTIALLY_PAID, ChargeStatus.OVERDUE] },
+    },
+    orderBy: [{ period: "asc" }, { seqInMonth: "asc" }], // oldest first
+  });
+
+  if (!charge) {
+    // known payer, no open invoice → whole amount to credit (B18)
+    await tx.client.update({
+      where: { id: acc.clientId },
+      data: { creditBalance: { increment: amount } },
+    });
+    await tx.statementLine.update({
+      where: { id: lineId },
+      data: { processed: true, linkedType: "Credit" },
+    });
+    await writeAudit(tx, {
+      entity: "StatementLine",
+      entityId: lineId,
+      action: "match.fifo.credit",
+      diff: { clientId: acc.clientId, amount },
+      userId,
+    });
+    return true;
+  }
+
+  const period = await tx.period.findUnique({ where: { id: charge.period } });
+  if (period?.status === "CLOSED") return false; // never mutate posted history (B9)
+
+  const remaining = charge.total - charge.paidAmount;
+  const applied = Math.min(amount, Math.max(remaining, 0));
+  const overpay = amount - applied;
+  await tx.payment.create({
+    data: {
+      clientId: acc.clientId,
+      chargeId: charge.id,
+      channel: PayChannel.BANK,
+      amount: applied,
+      date,
+      reference,
+      matchStatus: MatchStatus.AUTO_MATCHED,
+      statementLineId: lineId,
+    },
+  });
+  const newPaid = charge.paidAmount + applied;
+  await tx.charge.update({
+    where: { id: charge.id },
+    data: {
+      paidAmount: newPaid,
+      status: newPaid >= charge.total ? ChargeStatus.PAID : ChargeStatus.PARTIALLY_PAID,
+    },
+  });
+  if (overpay > 0)
+    await tx.client.update({
+      where: { id: acc.clientId },
+      data: { creditBalance: { increment: overpay } },
+    });
+  await tx.statementLine.update({
+    where: { id: lineId },
+    data: { processed: true, linkedType: "Charge", linkedId: charge.id },
+  });
+  await writeAudit(tx, {
+    entity: "StatementLine",
+    entityId: lineId,
+    action: "match.fifo",
+    diff: { clientId: acc.clientId, chargeId: charge.id, applied },
+    userId,
+  });
+  return true;
+}
+
+/** Run FIFO settlement over all currently-unmatched incoming lines (go-live one-off + safety net). */
+export async function runFifoOnUnmatched(userId: string): Promise<number> {
+  const lines = await prisma.statementLine.findMany({
+    where: { processed: false, direction: "IN" },
+    orderBy: { date: "asc" },
+    select: { id: true, amount: true, date: true, reference: true },
+  });
+  let settled = 0;
+  for (const l of lines) {
+    const ok = await prisma.$transaction((tx) =>
+      settleOldestByAccount(tx, l.id, l.amount, l.date, l.reference, userId),
+    );
+    if (ok) settled++;
+  }
+  return settled;
+}
+
 export async function ingestStatementPdf(
   buffer: Buffer,
   fileRef: string,
@@ -281,6 +397,27 @@ export async function ingestParsedStatement(
             data: { processed: true, linkedType: "Expense", linkedId: exp.id },
           });
         }
+      }
+
+      // FIFO (Part 2B): an incoming line still unmatched → settle the payer's oldest open invoice
+      // by giro account, so it never piles up in Решавање.
+      if (line.direction === Direction.IN) {
+        const cur = await tx.statementLine.findUnique({
+          where: { id: sl.id },
+          select: { processed: true },
+        });
+        if (
+          !cur?.processed &&
+          (await settleOldestByAccount(
+            tx,
+            sl.id,
+            line.amount,
+            statementDate,
+            line.reference,
+            userId,
+          ))
+        )
+          clientMatched++;
       }
     }
 

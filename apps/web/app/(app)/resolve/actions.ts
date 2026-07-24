@@ -7,9 +7,20 @@ import {
   categorizeStatementLine,
   ignoreStatementLine,
   manualMatchStatementLine,
+  runFifoOnUnmatched,
 } from "@/lib/workflows/w2";
 
 export type ActionResult = { ok: true; detail?: string } | { ok: false; error: string };
+
+/** Part 2B — settle unmatched payments against each payer's oldest open invoice (by giro account). */
+export async function fifoAction(): Promise<ActionResult> {
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  const settled = await runFifoOnUnmatched(auth.user.id);
+  revalidatePath("/resolve");
+  revalidatePath("/charges");
+  return { ok: true, detail: `Раздолжени ${settled} уплати по FIFO.` };
+}
 
 /** Match an incoming payment to a chosen open charge of the paying client (period-guarded B9). */
 export async function matchPaymentAction(lineId: string, chargeId: string): Promise<ActionResult> {

@@ -9,7 +9,7 @@ import type {
   ExpenseLineItem,
   PaymentItem,
 } from "@/lib/resolve";
-import { categorizeLineAction, ignoreLineAction, matchPaymentAction } from "./actions";
+import { categorizeLineAction, fifoAction, ignoreLineAction, matchPaymentAction } from "./actions";
 
 export function ResolveView({
   payments,
@@ -47,7 +47,18 @@ export function ResolveView({
             Непрепознаени уплати и трошоци од изводите (§9.4)
           </p>
         </div>
-        {msg && <span className="rounded-md bg-inset px-3 py-1.5 text-[12px] text-ink">{msg}</span>}
+        <div className="flex items-center gap-2">
+          {msg && (
+            <span className="rounded-md bg-inset px-3 py-1.5 text-[12px] text-ink">{msg}</span>
+          )}
+          <button
+            onClick={() => run(() => fifoAction())}
+            disabled={pending}
+            className="rounded-md border border-accent-200 px-3 py-1.5 text-[12px] font-bold text-accent hover:bg-accent-50 disabled:opacity-40"
+          >
+            Раздолжи FIFO
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

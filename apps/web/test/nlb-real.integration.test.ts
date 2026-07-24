@@ -4,12 +4,12 @@ import { describe, expect, it } from "vitest";
 import { parseNlbFromPdf } from "@/lib/pdf/nlb-parse";
 
 /**
- * Local-only validation of the positional NLB parser against the REAL Тутунска statements
- * (gitignored `Фактури/ФАКТУРИ НЛБ`). Skips automatically when the folder is absent (CI / clean
+ * Local-only validation of the positional NLB parser against the REAL NLB statements
+ * (gitignored `Фактури/ИЗВОДИ НЛБ`). Skips automatically when the folder is absent (CI / clean
  * checkout), so no real financial data is required or committed. When present, EVERY statement
  * must pass the integrity gate — the column-aware direction is what makes this possible.
  */
-const DIR = fileURLToPath(new URL("../../../Фактури/ФАКТУРИ НЛБ", import.meta.url));
+const DIR = fileURLToPath(new URL("../../../Фактури/ИЗВОДИ НЛБ", import.meta.url));
 const present = existsSync(DIR);
 
 describe.skipIf(!present)("NLB positional parser — real statements (local only)", () => {

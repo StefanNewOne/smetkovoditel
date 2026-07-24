@@ -11,7 +11,8 @@ const OPEN_STATUSES: ChargeStatus[] = [
 export async function getClients(channel?: "INVOICE" | "CASH") {
   const clients = await prisma.client.findMany({
     where: channel ? { paymentChannel: channel } : undefined,
-    orderBy: { name: "asc" },
+    // Order by the fixed client number (реден број); unnumbered clients fall to the bottom.
+    orderBy: [{ number: { sort: "asc", nulls: "last" } }, { name: "asc" }],
     include: {
       packages: { orderBy: { effectiveFrom: "desc" } },
       lineTemplates: { where: { active: true } },

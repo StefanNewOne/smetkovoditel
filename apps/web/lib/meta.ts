@@ -16,6 +16,7 @@ export interface AdAccountRow {
   name: string;
   clientId: string | null;
   clientName: string | null;
+  count: number; // receipts seen for this account
 }
 export interface FacebkLineRow {
   id: string;
@@ -51,7 +52,7 @@ export async function getMetaOverview(from?: string, to?: string) {
         }
       : {};
 
-  const [grouped, clients, accounts, facebk, orphans] = await Promise.all([
+  const [grouped, clients, accounts, facebk, orphans, allReceiptAccounts] = await Promise.all([
     prisma.expense.groupBy({
       by: ["clientId"],
       where: { category: "ADS", ...dateFilter },
@@ -62,10 +63,7 @@ export async function getMetaOverview(from?: string, to?: string) {
       select: { id: true, name: true, status: true },
       orderBy: { name: "asc" },
     }),
-    prisma.adAccount.findMany({
-      orderBy: { name: "asc" },
-      include: { client: { select: { name: true } } },
-    }),
+    prisma.adAccount.findMany({ include: { client: { select: { name: true } } } }),
     prisma.statementLine.findMany({
       where: { processed: false, classifiedAs: "META_ADS", direction: "OUT" },
       orderBy: { date: "asc" },
@@ -75,6 +73,8 @@ export async function getMetaOverview(from?: string, to?: string) {
       where: { matchStatus: "UNMATCHED" },
       orderBy: { invoiceDate: "desc" },
     }),
+    // Every ad account seen in receipts — so a NEW/unmapped account still shows up to be mapped.
+    prisma.adSpendReceipt.findMany({ select: { metaAccountId: true, accountName: true } }),
   ]);
 
   const nameById = new Map(clients.map((c) => [c.id, c.name] as const));
@@ -88,12 +88,32 @@ export async function getMetaOverview(from?: string, to?: string) {
     }))
     .sort((a, b) => b.totalRaw - a.totalRaw);
 
-  const adAccounts: AdAccountRow[] = accounts.map((a) => ({
-    metaAccountId: a.metaAccountId,
-    name: a.name,
-    clientId: a.clientId,
-    clientName: a.client?.name ?? null,
-  }));
+  // Union of every ad account: those seen in receipts (source of truth) + any existing mapping.
+  const mappedByAcc = new Map(accounts.map((a) => [a.metaAccountId, a] as const));
+  const receiptAgg = new Map<string, { name: string; count: number }>();
+  for (const r of allReceiptAccounts) {
+    if (!r.metaAccountId) continue;
+    const e = receiptAgg.get(r.metaAccountId) ?? {
+      name: r.accountName || r.metaAccountId,
+      count: 0,
+    };
+    e.count++;
+    receiptAgg.set(r.metaAccountId, e);
+  }
+  const allAccountIds = new Set<string>([...receiptAgg.keys(), ...mappedByAcc.keys()]);
+  const adAccounts: AdAccountRow[] = [...allAccountIds]
+    .map((id) => {
+      const mapped = mappedByAcc.get(id);
+      const agg = receiptAgg.get(id);
+      return {
+        metaAccountId: id,
+        name: mapped?.name ?? agg?.name ?? id,
+        clientId: mapped?.clientId ?? null,
+        clientName: mapped?.client?.name ?? null,
+        count: agg?.count ?? 0,
+      };
+    })
+    .sort((a, b) => b.count - a.count);
 
   const facebkLines: FacebkLineRow[] = facebk.map((l) => ({
     id: l.id,

@@ -140,7 +140,9 @@ export function MetaView({
               className="flex flex-wrap items-center gap-2 border-b border-border-3 px-4 py-2.5 text-[13px] last:border-0"
             >
               <span className="font-semibold text-ink">{a.name}</span>
-              <span className="text-[11px] text-muted-2">{a.metaAccountId}</span>
+              <span className="text-[11px] text-muted-2">
+                {a.metaAccountId} · {a.count} receipts
+              </span>
               <select
                 value={a.clientId ?? ""}
                 onChange={(e) =>

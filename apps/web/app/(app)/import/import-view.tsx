@@ -3,8 +3,8 @@
 import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Upload } from "lucide-react";
-import type { QueueItem, StatementRow } from "@/lib/import";
+import { ArrowRight, FileText, Upload } from "lucide-react";
+import type { MetaReceiptRow, QueueItem, StatementRow } from "@/lib/import";
 import { uploadAction } from "./actions";
 
 interface Queues {
@@ -15,7 +15,15 @@ interface Queues {
   partial: QueueItem[];
 }
 
-export function ImportView({ statements, queues }: { statements: StatementRow[]; queues: Queues }) {
+export function ImportView({
+  statements,
+  metaReceipts,
+  queues,
+}: {
+  statements: StatementRow[];
+  metaReceipts: MetaReceiptRow[];
+  queues: Queues;
+}) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [pending, startTransition] = useTransition();
@@ -105,9 +113,49 @@ export function ImportView({ statements, queues }: { statements: StatementRow[];
                 <p className="mt-1 text-muted">
                   претх {s.opening} · долгува {s.debit} · побарува {s.credit} · ново {s.closing}
                 </p>
-                <p className="mt-0.5 text-[11px] text-muted-2">
-                  {s.integrityOk ? "✓" : "⚠"} {s.lineCount}/{s.orderCount} налози
+                <div className="mt-0.5 flex items-center justify-between">
+                  <p className="text-[11px] text-muted-2">
+                    {s.integrityOk ? "✓" : "⚠"} {s.lineCount}/{s.orderCount} налози
+                  </p>
+                  <DocLink url={s.pdfUrl} name={s.pdfName} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Meta фактури — сите прикачени законски документи, прегледливи */}
+        <div className="rounded-xl border border-border bg-surface p-5">
+          <h3 className="mb-3 flex items-center gap-2 text-[14px] font-extrabold text-ink">
+            Meta фактури
+            <span className="rounded-[10px] bg-chip px-2 py-0.5 text-[11px] font-bold text-muted">
+              {metaReceipts.length}
+            </span>
+          </h3>
+          {metaReceipts.length === 0 && (
+            <p className="py-3 text-[13px] text-muted-2">Нема внесени Meta фактури.</p>
+          )}
+          <div className="flex max-h-[560px] flex-col gap-2 overflow-y-auto">
+            {metaReceipts.map((r) => (
+              <div key={r.id} className="rounded-lg border border-border-2 p-3 text-[12.5px]">
+                <div className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate font-extrabold text-ink">
+                    {r.referenceNumber}
+                  </span>
+                  <span className="text-muted-2">{r.date}</span>
+                  <MetaBadges parseStatus={r.parseStatus} matchStatus={r.matchStatus} />
+                </div>
+                <p className="mt-1 truncate text-muted">
+                  {r.accountName}
+                  {r.clientName ? ` · ${r.clientName}` : " · сопствен маркетинг"}
                 </p>
+                <div className="mt-0.5 flex items-center justify-between">
+                  <p className="text-[11px] text-muted-2">
+                    {r.amountUsd}
+                    {r.bookedMkd ? ` · книжено ${r.bookedMkd}` : ""} · {r.metaInvoiceNo}
+                  </p>
+                  <DocLink url={r.pdfUrl} name={r.pdfName} />
+                </div>
               </div>
             ))}
           </div>
@@ -162,6 +210,77 @@ export function ImportView({ statements, queues }: { statements: StatementRow[];
         <Queue title="PARTIAL / FAILED" items={queues.partial} danger />
       </div>
     </div>
+  );
+}
+
+/**
+ * Document reference for a statement / Meta invoice. A servable URL opens the original PDF via the
+ * auth-gated attachments route; a historical bulk-imported doc (name only, no served bytes) shows a
+ * muted, non-clickable chip so its existence is honest without pretending it's previewable in-app.
+ */
+function DocLink({ url, name }: { url: string | null; name: string | null }) {
+  if (url) {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        className="flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-[11px] font-bold text-accent hover:bg-accent-50"
+      >
+        <FileText size={12} /> Види PDF
+      </a>
+    );
+  }
+  if (name) {
+    return (
+      <span
+        title={`Оригиналот е импортиран од диск и не се сервира во апликацијата: ${name}`}
+        className="flex max-w-[55%] items-center gap-1 truncate text-[10.5px] text-muted-2"
+      >
+        <FileText size={11} /> {name}
+      </span>
+    );
+  }
+  return null;
+}
+
+const META_PARSE_LABEL: Record<string, string> = {
+  PARSED: "PARSED",
+  PARTIAL: "PARTIAL",
+  FAILED: "FAILED",
+};
+const META_MATCH_LABEL: Record<string, string> = {
+  AUTO_MATCHED: "спарен",
+  MANUAL_MATCHED: "спарен (рачно)",
+  UNMATCHED: "неспарен",
+  ALARM: "аларм",
+};
+
+function MetaBadges({ parseStatus, matchStatus }: { parseStatus: string; matchStatus: string }) {
+  const parseOk = parseStatus === "PARSED";
+  const matched = matchStatus === "AUTO_MATCHED" || matchStatus === "MANUAL_MATCHED";
+  return (
+    <span className="flex items-center gap-1 text-[10.5px] font-bold">
+      <span
+        className={`rounded-[8px] px-1.5 py-0.5 ${
+          parseOk ? "bg-success-50 text-success-700" : "bg-warning-50 text-warning-700"
+        }`}
+      >
+        {META_PARSE_LABEL[parseStatus] ?? parseStatus}
+      </span>
+      <span
+        className={`rounded-[8px] px-1.5 py-0.5 ${
+          matched
+            ? "bg-success-50 text-success-700"
+            : matchStatus === "ALARM"
+              ? "bg-danger-50 text-danger"
+              : "bg-chip text-muted"
+        }`}
+      >
+        {META_MATCH_LABEL[matchStatus] ?? matchStatus}
+      </span>
+    </span>
   );
 }
 

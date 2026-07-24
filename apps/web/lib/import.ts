@@ -14,6 +14,42 @@ export interface StatementRow {
   lineCount: number;
   status: string;
   integrityOk: boolean;
+  pdfUrl: string | null;
+  pdfName: string | null;
+}
+
+export interface MetaReceiptRow {
+  id: string;
+  referenceNumber: string;
+  metaInvoiceNo: string;
+  accountName: string;
+  clientName: string | null;
+  amountUsd: string;
+  bookedMkd: string | null;
+  date: string;
+  parseStatus: string;
+  matchStatus: string;
+  pdfUrl: string | null;
+  pdfName: string | null;
+}
+
+/**
+ * Resolve a stored attachment reference for display. Files uploaded via the app (or Gmail worker)
+ * carry a servable `/api/attachments/<name>` URL; historical bulk-imported docs carry a `local:<file>`
+ * marker whose bytes live on disk, not in the app — those are shown by name only, not linked.
+ */
+function attachment(ref: string | null | undefined): {
+  pdfUrl: string | null;
+  pdfName: string | null;
+} {
+  if (!ref) return { pdfUrl: null, pdfName: null };
+  if (ref.startsWith("/api/attachments/")) return { pdfUrl: ref, pdfName: null };
+  const name =
+    ref
+      .replace(/^local:/, "")
+      .split(/[\\/]/)
+      .pop() || ref;
+  return { pdfUrl: null, pdfName: name };
 }
 
 export interface ChargeOption {
@@ -64,6 +100,21 @@ export async function getImportCenter() {
     prisma.bankStatementImport.findMany({ where: { status: "FAILED" }, take: 50 }),
   ]);
 
+  // All uploaded Meta invoices (legal documents) — reviewable regardless of match state, with the
+  // attributed client (via the booked Expense, else the AdAccount mapping) and the booked MKD.
+  const [receiptsAll, adAccounts] = await Promise.all([
+    prisma.adSpendReceipt.findMany({
+      orderBy: { invoiceDate: "desc" },
+      take: 400,
+      include: {
+        expense: { include: { client: { select: { name: true, number: true } } } },
+        statementLine: { select: { amount: true } },
+      },
+    }),
+    prisma.adAccount.findMany({ include: { client: { select: { name: true, number: true } } } }),
+  ]);
+  const accClientMap = new Map(adAccounts.map((a) => [a.metaAccountId, a.client]));
+
   // Open charges offered as manual-match targets for unresolved CLIENT_PAYMENT lines (§9.4).
   const open = await prisma.charge.findMany({
     where: {
@@ -101,7 +152,29 @@ export async function getImportCenter() {
     lineCount: s._count.lines,
     status: s.status,
     integrityOk: s.status === "PARSED" && s._count.lines === s.orderCount,
+    ...attachment(s.fileRef),
   }));
+
+  const clientLabel = (c: { name: string; number: number | null } | null | undefined) =>
+    c ? (c.number != null ? `#${c.number} ${c.name}` : c.name) : null;
+  const metaReceipts: MetaReceiptRow[] = receiptsAll.map((r) => {
+    const client =
+      r.expense?.client ?? (r.metaAccountId ? accClientMap.get(r.metaAccountId) : null);
+    const booked = r.statementLine?.amount ?? r.expense?.amount ?? null;
+    return {
+      id: r.id,
+      referenceNumber: r.referenceNumber,
+      metaInvoiceNo: r.metaInvoiceNo,
+      accountName: r.accountName,
+      clientName: clientLabel(client),
+      amountUsd: `$${(r.amountUsd / 100).toFixed(2)}`,
+      bookedMkd: booked != null ? `${d0(booked)} ден` : null,
+      date: dt(r.invoiceDate),
+      parseStatus: r.parseStatus,
+      matchStatus: r.matchStatus,
+      ...attachment(r.attachmentUrl),
+    };
+  });
 
   const payments: QueueItem[] = qPayments.map((l) => {
     const exact = openByTotal.get(l.amount);
@@ -151,6 +224,7 @@ export async function getImportCenter() {
 
   return {
     statements: statementRows,
+    metaReceipts,
     queues: { payments, lines, receipts, facebk, partial },
     openCharges,
   };

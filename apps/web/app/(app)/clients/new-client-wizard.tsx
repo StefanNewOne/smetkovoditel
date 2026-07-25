@@ -74,7 +74,7 @@ export function NewClientWizard() {
 
   const canNext =
     (step === 0 && name.trim().length > 0) ||
-    (step === 1 && channel !== null && (!isInvoice || taxId.trim().length > 0)) ||
+    (step === 1 && channel !== null) || // ЕДБ optional (owner decision)
     (step === 2 && base > 0) ||
     step === 3 ||
     step === 4;
@@ -191,7 +191,7 @@ export function NewClientWizard() {
                   />
                 </div>
                 {isInvoice && (
-                  <Field label="ЕДБ (даночен број) — задолжително (B17)">
+                  <Field label="ЕДБ (даночен број) — по желба">
                     <input
                       className={inputCls}
                       value={taxId}

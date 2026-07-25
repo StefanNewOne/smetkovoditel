@@ -47,10 +47,11 @@ describe("loans (SM-100)", () => {
   it("records an IN line as a received loan and marks the line resolved (no Charge/Expense)", async () => {
     const l = await line("IN", 5_000_000, "loan:in:1");
 
-    await recordLoanFromLine(l.id, "Кекиќ", "прва позајмица", userId);
+    await recordLoanFromLine(l.id, "Кекиќ", "RECEIVED", "прва позајмица", userId);
 
     const loan = await prisma.loanEntry.findFirstOrThrow();
     expect(loan.direction).toBe("IN");
+    expect(loan.kind).toBe("RECEIVED");
     expect(loan.amount).toBe(5_000_000);
     expect(loan.lenderName).toBe("Кекиќ");
     const after = await prisma.statementLine.findUniqueOrThrow({ where: { id: l.id } });
@@ -62,20 +63,41 @@ describe("loans (SM-100)", () => {
     expect(audit).not.toBeNull();
   });
 
-  it("nets received − repaid into the outstanding balance per lender", async () => {
-    await recordLoanFromLine((await line("IN", 5_000_000, "l:1")).id, "Кекиќ", null, userId);
-    await recordLoanFromLine((await line("IN", 3_000_000, "l:2")).id, "Кекиќ", null, userId);
-    await recordLoanFromLine((await line("OUT", 2_000_000, "l:3")).id, "Кекиќ", null, userId);
+  it("nets примена − поврат − (дадена − наплата) per person", async () => {
+    await recordLoanFromLine((await line("IN", 5_000_000, "l:1")).id, "Кекиќ", "RECEIVED", null, userId); // prettier-ignore
+    await recordLoanFromLine((await line("IN", 3_000_000, "l:2")).id, "Кекиќ", "RECEIVED", null, userId); // prettier-ignore
+    await recordLoanFromLine(
+      (await line("OUT", 2_000_000, "l:3")).id,
+      "Кекиќ",
+      "REPAID",
+      null,
+      userId,
+    );
+    await recordLoanFromLine(
+      (await line("OUT", 1_000_000, "l:4")).id,
+      "Кекиќ",
+      "GIVEN",
+      null,
+      userId,
+    );
 
     const balances = await getLoanBalances();
     expect(balances).toHaveLength(1);
     expect(balances[0]!.lenderName).toBe("Кекиќ");
-    expect(balances[0]!.outstandingRaw).toBe(6_000_000); // 5.000.000 + 3.000.000 − 2.000.000
+    // (5M + 3M received − 2M repaid) − (1M given − 0 collected) = 5M owed to the person
+    expect(balances[0]!.netRaw).toBe(5_000_000);
+    expect(balances[0]!.count).toBe(4);
+  });
+
+  it("rejects a kind that does not match the line direction", async () => {
+    const l = await line("IN", 1_000_000, "loan:mismatch");
+    // GIVEN is an OUT kind — invalid for an IN line
+    await expect(recordLoanFromLine(l.id, "Кекиќ", "GIVEN", null, userId)).rejects.toThrow();
   });
 
   it("rejects recording an already-resolved line", async () => {
     const l = await line("IN", 1_000_000, "loan:dup");
-    await recordLoanFromLine(l.id, "Кекиќ", null, userId);
-    await expect(recordLoanFromLine(l.id, "Кекиќ", null, userId)).rejects.toThrow();
+    await recordLoanFromLine(l.id, "Кекиќ", "RECEIVED", null, userId);
+    await expect(recordLoanFromLine(l.id, "Кекиќ", "RECEIVED", null, userId)).rejects.toThrow();
   });
 });

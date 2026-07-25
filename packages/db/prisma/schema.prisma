@@ -494,13 +494,22 @@ model Period {
   loanEntries LoanEntry[]
 }
 
-// SM-100: owner/private-person loans to the company (financing flow — a liability, not revenue or
-// expense). IN = received (позајмица примена), OUT = repaid (поврат). Never touches Charges/Expenses
-// or P&L; the outstanding balance per lender = Σ IN − Σ OUT. Rule #1: linked to its bank line.
+// SM-100/SM-102: owner/private-person loans — a financing flow (liability/receivable), never revenue
+// or expense. Four kinds (SM-102): RECEIVED (примена, IN) / REPAID (поврат, OUT) form the company's
+// liability; GIVEN (дадена, OUT) / COLLECTED (наплата, IN) form its receivable. Never touches
+// Charges/Expenses or P&L. Rule #1: linked to its bank line.
+enum LoanKind {
+  RECEIVED // примена — a person lent to the company (IN)
+  REPAID // поврат — the company paid a person back (OUT)
+  GIVEN // дадена — the company lent to a person (OUT)
+  COLLECTED // наплата — a person paid the company back (IN)
+}
+
 model LoanEntry {
   id              String         @id @default(cuid())
   lenderName      String
-  direction       Direction // IN = примена (фирмата прима), OUT = поврат (фирмата враќа)
+  direction       Direction // bank direction of the line (IN/OUT)
+  kind            LoanKind       @default(RECEIVED) // SM-102: primena/поврат/дадена/наплата
   amount          Int // дени
   date            DateTime
   note            String?

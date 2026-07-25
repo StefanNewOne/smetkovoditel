@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { LoanKind } from "@smetko/db";
 import { categoryExists } from "@/lib/expenses";
 import { recordLoanFromLine } from "@/lib/loans";
 import { requireWriter } from "@/lib/rbac";
@@ -47,16 +48,19 @@ export async function linkAccountAction(lineId: string, clientId: string): Promi
   }
 }
 
-/** Record a bank line as an owner loan movement (IN = received, OUT = repaid) — not revenue/expense. */
+/** Record a bank line as a loan movement of the chosen kind (примена/дадена/поврат/наплата). */
 export async function recordLoanAction(
   lineId: string,
   lenderName: string,
+  kind: string,
   note: string,
 ): Promise<ActionResult> {
   const auth = await requireWriter();
   if (!auth.ok) return auth;
+  if (!(["RECEIVED", "REPAID", "GIVEN", "COLLECTED"] as string[]).includes(kind))
+    return { ok: false, error: "Непознат тип на позајмица." };
   try {
-    await recordLoanFromLine(lineId, lenderName, note || null, auth.user.id);
+    await recordLoanFromLine(lineId, lenderName, kind as LoanKind, note || null, auth.user.id);
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Записот не успеа." };
   }

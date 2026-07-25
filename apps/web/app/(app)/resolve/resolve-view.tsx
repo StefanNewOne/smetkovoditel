@@ -22,18 +22,29 @@ import {
   recordLoanAction,
 } from "./actions";
 
-/** Mark a line as a loan movement (SM-100): expands to a lender-name input, then records it. IN →
- *  "позајмица (примена)", OUT → "поврат на позајмица" — the direction is fixed by the line. */
+/** Loan kinds valid per bank direction (SM-102) — mirrors LOAN_KINDS_BY_DIRECTION (server). */
+const IN_KINDS = [
+  { kind: "RECEIVED", label: "Примена (примивме позајмица)" },
+  { kind: "COLLECTED", label: "Наплата (ни враќаат дадена)" },
+];
+const OUT_KINDS = [
+  { kind: "GIVEN", label: "Дадена (дадовме позајмица)" },
+  { kind: "REPAID", label: "Поврат (враќаме примена)" },
+];
+
+/** Mark a line as a loan movement (SM-100/SM-102): choose kind (примена/дадена/поврат/наплата) —
+ *  the valid kinds depend on the line's bank direction — plus the person, then record it. */
 function LoanControl({
-  label,
+  kinds,
   pending,
   onLoan,
 }: {
-  label: string;
+  kinds: { kind: string; label: string }[];
   pending: boolean;
-  onLoan: (lender: string, note: string) => void;
+  onLoan: (kind: string, lender: string, note: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState(kinds[0]!.kind);
   const [lender, setLender] = useState("");
   const [note, setNote] = useState("");
 
@@ -44,17 +55,27 @@ function LoanControl({
         disabled={pending}
         className="mt-1.5 w-full rounded border border-border px-2 py-1 text-[11px] font-semibold text-muted hover:bg-chip disabled:opacity-40"
       >
-        {label}
+        Позајмица
       </button>
     );
   }
   return (
     <div className="mt-1.5 flex flex-col gap-1.5 rounded border border-border-2 bg-surface p-2">
-      <p className="text-[11px] font-bold text-ink">{label}</p>
+      <select
+        value={kind}
+        onChange={(e) => setKind(e.target.value)}
+        className="rounded border border-input bg-surface px-1.5 py-1 text-[11px] font-semibold"
+      >
+        {kinds.map((k) => (
+          <option key={k.kind} value={k.kind}>
+            {k.label}
+          </option>
+        ))}
+      </select>
       <input
         value={lender}
         onChange={(e) => setLender(e.target.value)}
-        placeholder="Име на заемодавач (приватно лице)"
+        placeholder="Име на лицето"
         list="loan-lenders"
         className="rounded border border-input px-1.5 py-1 text-[11px]"
       />
@@ -66,7 +87,7 @@ function LoanControl({
       />
       <div className="flex items-center gap-1.5">
         <button
-          onClick={() => lender.trim() && onLoan(lender.trim(), note)}
+          onClick={() => lender.trim() && onLoan(kind, lender.trim(), note)}
           disabled={pending || lender.trim().length < 2}
           className="flex-1 rounded bg-accent px-2 py-1 text-[11px] font-bold text-white disabled:opacity-40"
         >
@@ -195,7 +216,9 @@ export function ResolveView({
                   pending={pending}
                   onMatch={(chargeId) => run(() => matchPaymentAction(p.id, chargeId))}
                   onLinkAccount={(clientId) => run(() => linkAccountAction(p.id, clientId))}
-                  onLoan={(lender, note) => run(() => recordLoanAction(p.id, lender, note))}
+                  onLoan={(kind, lender, note) =>
+                    run(() => recordLoanAction(p.id, lender, kind, note))
+                  }
                 />
               ))}
             </div>
@@ -227,8 +250,8 @@ export function ResolveView({
                     run(() => categorizeLineAction(lineId, cat, remember))
                   }
                   onIgnore={(lineId) => run(() => ignoreLineAction(lineId))}
-                  onLoan={(lineId, lender, note) =>
-                    run(() => recordLoanAction(lineId, lender, note))
+                  onLoan={(lineId, kind, lender, note) =>
+                    run(() => recordLoanAction(lineId, lender, kind, note))
                   }
                 />
               ))}
@@ -255,7 +278,7 @@ function PaymentRow({
   pending: boolean;
   onMatch: (chargeId: string) => void;
   onLinkAccount: (clientId: string) => void;
-  onLoan: (lender: string, note: string) => void;
+  onLoan: (kind: string, lender: string, note: string) => void;
 }) {
   const [clientId, setClientId] = useState(item.suggestedClientId ?? "");
   const [chargeId, setChargeId] = useState("");
@@ -344,7 +367,7 @@ function PaymentRow({
           Поврзи ја сметката со клиентот → раздолжи (FIFO)
         </button>
       )}
-      <LoanControl label="Позајмица (примена)" pending={pending} onLoan={onLoan} />
+      <LoanControl kinds={IN_KINDS} pending={pending} onLoan={onLoan} />
     </div>
   );
 }
@@ -366,7 +389,7 @@ function ExpenseGroupCard({
   onBulk: (category: string, learn: boolean) => void;
   onCategorize: (lineId: string, category: string, remember: boolean) => void;
   onIgnore: (lineId: string) => void;
-  onLoan: (lineId: string, lender: string, note: string) => void;
+  onLoan: (lineId: string, kind: string, lender: string, note: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [bulkCat, setBulkCat] = useState("");
@@ -380,7 +403,7 @@ function ExpenseGroupCard({
       pending={pending}
       onCategorize={(cat, remember) => onCategorize(item.id, cat, remember)}
       onIgnore={() => onIgnore(item.id)}
-      onLoan={(lender, note) => onLoan(item.id, lender, note)}
+      onLoan={(kind, lender, note) => onLoan(item.id, kind, lender, note)}
     />
   ));
 
@@ -458,7 +481,7 @@ function ExpenseRow({
   pending: boolean;
   onCategorize: (category: string, rememberVendor: boolean) => void;
   onIgnore: () => void;
-  onLoan: (lender: string, note: string) => void;
+  onLoan: (kind: string, lender: string, note: string) => void;
 }) {
   const [category, setCategory] = useState("");
   const [remember, setRemember] = useState(true);
@@ -514,7 +537,7 @@ function ExpenseRow({
           Игнорирај
         </button>
       </div>
-      <LoanControl label="Поврат на позајмица" pending={pending} onLoan={onLoan} />
+      <LoanControl kinds={OUT_KINDS} pending={pending} onLoan={onLoan} />
     </div>
   );
 }

@@ -7,11 +7,13 @@ import type {
   CategoryOption,
   ChargeOption,
   ClientOption,
+  ExpenseGroup,
   ExpenseLineItem,
   LineSource,
   PaymentItem,
 } from "@/lib/resolve";
 import {
+  bulkCategorizeAction,
   categorizeLineAction,
   fifoAction,
   ignoreLineAction,
@@ -114,14 +116,14 @@ function SourceLine({ src }: { src: LineSource }) {
 
 export function ResolveView({
   payments,
-  expenses,
+  expenseGroups,
   clients,
   openCharges,
   categories,
   lenders,
 }: {
   payments: PaymentItem[];
-  expenses: ExpenseLineItem[];
+  expenseGroups: ExpenseGroup[];
   clients: ClientOption[];
   openCharges: ChargeOption[];
   categories: CategoryOption[];
@@ -140,6 +142,8 @@ export function ResolveView({
       router.refresh();
     });
   }
+
+  const expenseCount = expenseGroups.reduce((s, g) => s + g.count, 0);
 
   return (
     <div className="flex flex-col gap-4">
@@ -198,29 +202,34 @@ export function ResolveView({
           )}
         </section>
 
-        {/* Извод-линии за решавање (трошоци) */}
+        {/* Извод-линии за решавање (трошоци) — групирани по продавач/сметка */}
         <section className="rounded-xl border border-border bg-surface p-5">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-[14px] font-extrabold text-ink">Трошоци за категоризација</h3>
             <span className="rounded-[10px] bg-warning-50 px-2 py-0.5 text-[11px] font-bold text-warning-700">
-              {expenses.length}
+              {expenseCount}
             </span>
           </div>
-          {expenses.length === 0 ? (
+          {expenseGroups.length === 0 ? (
             <p className="py-2 text-[12.5px] text-muted-2">✓ Нема нерешени трошоци</p>
           ) : (
             <div className="flex flex-col gap-2">
-              {expenses.map((e) => (
-                <ExpenseRow
-                  key={e.id}
-                  item={e}
+              {expenseGroups.map((g) => (
+                <ExpenseGroupCard
+                  key={g.key}
+                  group={g}
                   categories={categories}
                   pending={pending}
-                  onCategorize={(cat, remember) =>
-                    run(() => categorizeLineAction(e.id, cat, remember))
+                  onBulk={(cat, learn) =>
+                    run(() => bulkCategorizeAction(g.lineIds, cat, learn ? g.learnPattern : null))
                   }
-                  onIgnore={() => run(() => ignoreLineAction(e.id))}
-                  onLoan={(lender, note) => run(() => recordLoanAction(e.id, lender, note))}
+                  onCategorize={(lineId, cat, remember) =>
+                    run(() => categorizeLineAction(lineId, cat, remember))
+                  }
+                  onIgnore={(lineId) => run(() => ignoreLineAction(lineId))}
+                  onLoan={(lineId, lender, note) =>
+                    run(() => recordLoanAction(lineId, lender, note))
+                  }
                 />
               ))}
             </div>
@@ -336,6 +345,102 @@ function PaymentRow({
         </button>
       )}
       <LoanControl label="Позајмица (примена)" pending={pending} onLoan={onLoan} />
+    </div>
+  );
+}
+
+/** A merchant/account group of outgoing lines (SM-99 phase C): bulk-categorize all at once (with an
+ *  optional learned rule), or expand to resolve lines individually. A single-line group is just a row. */
+function ExpenseGroupCard({
+  group,
+  categories,
+  pending,
+  onBulk,
+  onCategorize,
+  onIgnore,
+  onLoan,
+}: {
+  group: ExpenseGroup;
+  categories: CategoryOption[];
+  pending: boolean;
+  onBulk: (category: string, learn: boolean) => void;
+  onCategorize: (lineId: string, category: string, remember: boolean) => void;
+  onIgnore: (lineId: string) => void;
+  onLoan: (lineId: string, lender: string, note: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [bulkCat, setBulkCat] = useState("");
+  const [learn, setLearn] = useState(true);
+
+  const rows = group.items.map((item) => (
+    <ExpenseRow
+      key={item.id}
+      item={item}
+      categories={categories}
+      pending={pending}
+      onCategorize={(cat, remember) => onCategorize(item.id, cat, remember)}
+      onIgnore={() => onIgnore(item.id)}
+      onLoan={(lender, note) => onLoan(item.id, lender, note)}
+    />
+  ));
+
+  // A lone line needs no grouping ceremony — show it directly.
+  if (group.count === 1) return rows[0]!;
+
+  return (
+    <div className="rounded-md border border-border-2 bg-inset/50 p-2">
+      <div className="flex items-center gap-2 text-[12px]">
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+        >
+          <span className="text-muted-2">{expanded ? "▾" : "▸"}</span>
+          <span className="truncate font-bold text-ink">{group.label}</span>
+          <span className="rounded-[8px] bg-chip px-1.5 py-0.5 text-[10.5px] font-bold text-muted">
+            {group.count}
+          </span>
+          <span className="text-[11px] text-muted-2">
+            · {group.kind === "CARD" ? "картични" : "трансфери"}
+          </span>
+        </button>
+        <span className="font-semibold text-muted">−{group.total}</span>
+      </div>
+
+      {/* Bulk categorize the whole group */}
+      <div className="mt-1.5 flex items-center gap-1.5">
+        <select
+          value={bulkCat}
+          onChange={(e) => setBulkCat(e.target.value)}
+          className="min-w-0 flex-1 rounded border border-input bg-surface px-1.5 py-1 text-[11px]"
+        >
+          <option value="">Категорија за сите…</option>
+          {categories.map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={() => bulkCat && onBulk(bulkCat, learn)}
+          disabled={pending || !bulkCat}
+          className="rounded bg-accent px-2 py-1 text-[11px] font-bold text-white disabled:opacity-40"
+        >
+          Сите {group.count}
+        </button>
+      </div>
+      {group.learnPattern.length >= 3 && (
+        <label className="mt-1 flex items-center gap-1.5 text-[11px] text-muted">
+          <input
+            type="checkbox"
+            checked={learn}
+            onChange={(e) => setLearn(e.target.checked)}
+            className="h-3 w-3"
+          />
+          Научи правило ({group.learnPattern})
+        </label>
+      )}
+
+      {expanded && <div className="mt-2 flex flex-col gap-2">{rows}</div>}
     </div>
   );
 }

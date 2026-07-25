@@ -5,6 +5,7 @@ import { categoryExists } from "@/lib/expenses";
 import { recordLoanFromLine } from "@/lib/loans";
 import { requireWriter } from "@/lib/rbac";
 import {
+  bulkCategorizeLines,
   categorizeStatementLine,
   ignoreStatementLine,
   linkAccountAndSettle,
@@ -100,6 +101,34 @@ export async function categorizeLineAction(
   } finally {
     revalidatePath("/resolve");
     revalidatePath("/reports");
+  }
+}
+
+/** Categorize a whole merchant/account group as one category; optionally learn a rule for the group. */
+export async function bulkCategorizeAction(
+  lineIds: string[],
+  category: string,
+  learnPattern: string | null,
+): Promise<ActionResult> {
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  if (!(await categoryExists(category))) return { ok: false, error: "Непозната категорија." };
+  try {
+    const { categorized, learnedRule } = await bulkCategorizeLines(
+      lineIds,
+      category,
+      learnPattern,
+      auth.user.id,
+    );
+    revalidatePath("/resolve");
+    revalidatePath("/expenses");
+    revalidatePath("/recurring");
+    return {
+      ok: true,
+      detail: `Категоризирани ${categorized}${learnedRule ? " · запаметено правило" : ""}.`,
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Категоризацијата не успеа." };
   }
 }
 

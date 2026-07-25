@@ -409,18 +409,26 @@ export async function ingestParsedStatement(
           match.paidAmount = newPaid; // avoid re-matching within this statement
           clientMatched++;
         }
-      } else if (line.classifiedAs === "CARD_TX" && line.merchant) {
-        // SM-51: auto-categorize card purchases via VendorRule (e.g. PETROL → FUEL).
-        const merchant = line.merchant.toUpperCase();
-        const rule = vendorRules.find((r) => merchant.includes(r.pattern.toUpperCase()));
+      } else if (
+        line.direction === Direction.OUT &&
+        (line.classifiedAs === "CARD_TX" || line.classifiedAs === "OTHER")
+      ) {
+        // SM-51/SM-100: auto-categorize via VendorRule — by card merchant (substring) or, for a
+        // transfer with no merchant, by the exact recipient account (learned account→vendor memory).
+        const merchant = (line.merchant ?? "").toUpperCase();
+        const rule = vendorRules.find(
+          (r) =>
+            (merchant.length > 0 && merchant.includes(r.pattern.toUpperCase())) ||
+            (!!line.counterpartyAccount && r.pattern === line.counterpartyAccount),
+        );
         if (rule) {
           const exp = await tx.expense.create({
             data: {
               category: rule.category,
-              vendor: rule.vendor ?? line.merchant,
+              vendor: rule.vendor ?? line.merchant ?? line.counterpartyAccount,
               amount: line.amount,
               date: statementDate,
-              paymentChannel: PayChannel.CARD,
+              paymentChannel: line.classifiedAs === "CARD_TX" ? PayChannel.CARD : PayChannel.BANK,
               isBillable: false,
               statementLineId: sl.id,
             },
@@ -762,5 +770,61 @@ export async function categorizeStatementLine(
       userId,
     });
     return { expenseId: exp.id, learnedRule, siblingMatches };
+  });
+}
+
+/**
+ * SM-99 phase C — categorize many outgoing lines (a merchant/account group) as one category in a
+ * single transaction, optionally learning ONE VendorRule from the group's pattern (merchant token
+ * for card groups, account number for transfer groups) so future imports auto-categorize them.
+ * Skips already-processed / non-OUT lines; period-guarded (B9) per line.
+ */
+export async function bulkCategorizeLines(
+  lineIds: string[],
+  category: string,
+  learnPattern: string | null,
+  userId: string,
+): Promise<{ categorized: number; learnedRule: boolean }> {
+  return prisma.$transaction(async (tx) => {
+    let categorized = 0;
+    for (const id of lineIds) {
+      const line = await tx.statementLine.findUnique({ where: { id } });
+      if (!line || line.processed || line.direction !== Direction.OUT) continue;
+      await assertPeriodOpen(tx, periodOfDate(line.date)); // B9
+      const exp = await tx.expense.create({
+        data: {
+          category,
+          vendor: line.counterpartyName ?? line.description ?? line.counterpartyAccount,
+          amount: line.amount,
+          date: line.date,
+          paymentChannel: line.classifiedAs === "CARD_TX" ? PayChannel.CARD : PayChannel.BANK,
+          isBillable: false,
+          statementLineId: line.id,
+        },
+      });
+      await tx.statementLine.update({
+        where: { id: line.id },
+        data: { processed: true, linkedType: "Expense", linkedId: exp.id },
+      });
+      await writeAudit(tx, {
+        entity: "StatementLine",
+        entityId: line.id,
+        action: "line.categorized",
+        diff: { category, amount: line.amount, expenseId: exp.id, bulk: true },
+        userId,
+      });
+      categorized++;
+    }
+
+    let learnedRule = false;
+    const pattern = (learnPattern ?? "").trim().toUpperCase();
+    if (pattern.length >= 3) {
+      const existing = await tx.vendorRule.findFirst({ where: { pattern, category } });
+      if (!existing) {
+        await tx.vendorRule.create({ data: { pattern, category, vendor: learnPattern } });
+        learnedRule = true;
+      }
+    }
+    return { categorized, learnedRule };
   });
 }

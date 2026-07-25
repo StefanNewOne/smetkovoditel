@@ -45,7 +45,30 @@ export interface ExpenseLineItem extends LineSource {
   bankRef: string | null; // card auth code ("Податоци за рекламација")
   classifiedAs?: string;
 }
+/** Outgoing lines grouped by merchant (card) / recipient account (transfer) for bulk categorization. */
+export interface ExpenseGroup {
+  key: string;
+  label: string;
+  kind: "CARD" | "TRANSFER";
+  count: number;
+  total: string;
+  learnPattern: string; // merchant token / account — the VendorRule pattern to learn for this group
+  lineIds: string[];
+  items: ExpenseLineItem[];
+}
 export type { CategoryOption } from "@/lib/expenses";
+
+/** Merchant token from a card description: drop digits, location noise and the garbled font suffix,
+ *  so "SKOPJE  BP LISICE 053 10012500" → "BP LISICE" — a stable key to cluster the same merchant. */
+function merchantKey(desc: string): string {
+  return (desc || "")
+    .toUpperCase()
+    .replace(/[0-9]/g, " ")
+    .replace(/\bSKOPJE\b|\bOPSTINA\b/g, " ")
+    .replace(/[^A-ZА-Ш ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 const d0 = (n: number) => formatMKD(n, { decimals: 0 });
 const dt = (d: Date) =>
@@ -163,18 +186,43 @@ export async function getResolveCenter() {
     };
   });
 
-  const expenses: ExpenseLineItem[] = qExpenses.map((l) => ({
-    id: l.id,
-    amount: `−${d0(l.amount)}`,
-    title: l.description || l.counterpartyName || l.classifiedAs || "Извод-линија",
-    context: l.classifiedAs === "CARD_TX" ? "Картична" : "Трансфер",
-    statementNumber: l.import.statementNumber,
-    date: dt(l.date),
-    account: l.counterpartyAccount,
-    bankRef: l.bankRef,
-    ...attachmentRef(l.import.fileRef),
-    classifiedAs: l.classifiedAs ?? undefined,
-  }));
+  const expenses: ExpenseLineItem[] = [];
+  const groupsMap = new Map<string, { g: ExpenseGroup; totalRaw: number }>();
+  for (const l of qExpenses) {
+    const item: ExpenseLineItem = {
+      id: l.id,
+      amount: `−${d0(l.amount)}`,
+      title: l.description || l.counterpartyName || l.classifiedAs || "Извод-линија",
+      context: l.classifiedAs === "CARD_TX" ? "Картична" : "Трансфер",
+      statementNumber: l.import.statementNumber,
+      date: dt(l.date),
+      account: l.counterpartyAccount,
+      bankRef: l.bankRef,
+      ...attachmentRef(l.import.fileRef),
+      classifiedAs: l.classifiedAs ?? undefined,
+    };
+    expenses.push(item);
 
-  return { payments, expenses, clients, openCharges, categories, lenders };
+    const isCard = l.classifiedAs === "CARD_TX";
+    const token = isCard ? merchantKey(l.description) : (l.counterpartyAccount ?? "");
+    const label = token || (isCard ? "Картична (без опис)" : "Трансфер (без сметка)");
+    const key = (isCard ? "c:" : "t:") + label;
+    let entry = groupsMap.get(key);
+    if (!entry) {
+      entry = {
+        g: { key, label, kind: isCard ? "CARD" : "TRANSFER", count: 0, total: "", learnPattern: token, lineIds: [], items: [] }, // prettier-ignore
+        totalRaw: 0,
+      };
+      groupsMap.set(key, entry);
+    }
+    entry.g.items.push(item);
+    entry.g.lineIds.push(l.id);
+    entry.g.count++;
+    entry.totalRaw += l.amount;
+  }
+  const expenseGroups: ExpenseGroup[] = [...groupsMap.values()]
+    .map((e) => ({ ...e.g, total: d0(e.totalRaw) }))
+    .sort((a, b) => b.count - a.count || b.items.length - a.items.length);
+
+  return { payments, expenses, expenseGroups, clients, openCharges, categories, lenders };
 }

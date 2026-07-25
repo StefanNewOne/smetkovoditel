@@ -2,14 +2,19 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Pencil, Plus, X } from "lucide-react";
 import { parseDenari } from "@smetko/shared";
-import type { EmployeeRow, PayrollRunRow, VendorRuleRow } from "@/lib/settings";
+import type { CategoryAdminRow, EmployeeRow, PayrollRunRow, VendorRuleRow } from "@/lib/settings";
 import {
   addVendorRuleAction,
+  createCategoryAction,
   createEmployeeAction,
   removeVendorRuleAction,
+  renameCategoryAction,
+  type Result,
   runPayrollAction,
+  setCategoryActiveAction,
+  setCategoryRecurringAction,
 } from "./actions";
 
 interface Config {
@@ -17,11 +22,6 @@ interface Config {
   vendorRules: number;
   bank: string;
   nextNumber: string;
-}
-
-interface CategoryOption {
-  value: string;
-  label: string;
 }
 
 function safeDeni(raw: string): number {
@@ -38,14 +38,14 @@ export function SettingsView({
   runs,
   config,
   vendorRules,
-  categories,
+  catAdmin,
 }: {
   period: string;
   employees: EmployeeRow[];
   runs: PayrollRunRow[];
   config: Config;
   vendorRules: VendorRuleRow[];
-  categories: CategoryOption[];
+  catAdmin: CategoryAdminRow[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -76,9 +76,9 @@ export function SettingsView({
         <ConfigCard label="Ad акаунти" value="во клиент-профили" />
       </div>
 
-      <VendorRulesSection
+      <CategoriesSection
+        catAdmin={catAdmin}
         rules={vendorRules}
-        categories={categories}
         pending={pending}
         onChanged={() => router.refresh()}
         onError={(e) => setMsg(e)}
@@ -236,106 +236,238 @@ function AddEmployeeModal({
   );
 }
 
-function VendorRulesSection({
+function CategoriesSection({
+  catAdmin,
   rules,
-  categories,
   pending,
   onChanged,
   onError,
 }: {
+  catAdmin: CategoryAdminRow[];
   rules: VendorRuleRow[];
-  categories: CategoryOption[];
   pending: boolean;
   onChanged: () => void;
   onError: (e: string) => void;
 }) {
-  const [pattern, setPattern] = useState("");
-  const [category, setCategory] = useState("");
-  const [vendor, setVendor] = useState("");
+  const [newLabel, setNewLabel] = useState("");
+  const [newRecurring, setNewRecurring] = useState(false);
   const [busy, startTransition] = useTransition();
   const disabled = pending || busy;
 
-  const add = () =>
+  const rulesByCat = new Map<string, VendorRuleRow[]>();
+  for (const r of rules) {
+    const list = rulesByCat.get(r.category) ?? [];
+    list.push(r);
+    rulesByCat.set(r.category, list);
+  }
+
+  const act = (fn: () => Promise<Result>) =>
     startTransition(async () => {
-      const r = await addVendorRuleAction(pattern, category, vendor);
-      if (r.ok) {
-        setPattern("");
-        setVendor("");
-        setCategory("");
-        onChanged();
-      } else onError(r.error);
+      const r = await fn();
+      if (r.ok) onChanged();
+      else onError(r.error);
     });
 
   return (
     <div className="rounded-xl border border-border bg-surface p-5">
-      <h3 className="mb-1 text-[14px] font-extrabold text-ink">
-        Правила за продавачи (авто-категоризација)
-      </h3>
+      <h3 className="mb-1 text-[14px] font-extrabold text-ink">Категории и продавачи</h3>
       <p className="mb-3 text-[12px] text-muted-2">
-        Кога описот на картичен трошок содржи шаблон, при увоз автоматски се категоризира (§4.2).
+        Категориите на трошоци. Избери една за да ги видиш/додадеш нејзините продавачи (шаблони што
+        авто-категоризираат при увоз, §4.2). „Тековна“ ја носи во екранот Тековни трошоци.
       </p>
 
-      <div className="mb-3 flex flex-wrap items-end gap-2">
+      {/* Add a custom category */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <input
-          value={pattern}
-          onChange={(e) => setPattern(e.target.value)}
-          placeholder="Шаблон (пр. PETROL)"
-          className="min-w-[140px] flex-1 rounded-md border border-input px-3 py-2 text-[13px]"
+          value={newLabel}
+          onChange={(e) => setNewLabel(e.target.value)}
+          placeholder="Нова категорија (пр. Осигурување)"
+          className="min-w-[180px] flex-1 rounded-md border border-input px-3 py-2 text-[13px]"
         />
-        <select
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          className="min-w-[140px] flex-1 rounded-md border border-input bg-surface px-3 py-2 text-[13px]"
-        >
-          <option value="">Категорија…</option>
-          {categories.map((c) => (
-            <option key={c.value} value={c.value}>
-              {c.label}
-            </option>
-          ))}
-        </select>
-        <input
-          value={vendor}
-          onChange={(e) => setVendor(e.target.value)}
-          placeholder="Продавач (опц.)"
-          className="min-w-[120px] flex-1 rounded-md border border-input px-3 py-2 text-[13px]"
-        />
+        <label className="flex items-center gap-1.5 text-[12px] text-muted">
+          <input
+            type="checkbox"
+            checked={newRecurring}
+            onChange={(e) => setNewRecurring(e.target.checked)}
+            className="h-3.5 w-3.5"
+          />
+          Тековна
+        </label>
         <button
-          onClick={add}
-          disabled={disabled || !pattern.trim() || !category}
-          className="rounded-md bg-accent px-4 py-2 text-[12.5px] font-bold text-white disabled:opacity-40"
+          onClick={() =>
+            act(async () => {
+              const r = await createCategoryAction(newLabel, newRecurring);
+              if (r.ok) {
+                setNewLabel("");
+                setNewRecurring(false);
+              }
+              return r;
+            })
+          }
+          disabled={disabled || newLabel.trim().length < 2}
+          className="flex items-center gap-1 rounded-md bg-accent px-4 py-2 text-[12.5px] font-bold text-white disabled:opacity-40"
         >
-          Додади
+          <Plus size={13} /> Категорија
         </button>
       </div>
 
       <div className="flex flex-col gap-1.5">
-        {rules.length === 0 && <p className="text-[12.5px] text-muted-2">Нема правила.</p>}
-        {rules.map((r) => (
-          <div
-            key={r.id}
-            className="flex items-center gap-2 rounded-md bg-inset px-3 py-1.5 text-[12.5px]"
-          >
-            <span className="font-semibold text-ink">{r.pattern}</span>
-            <span className="text-muted-2">→ {r.categoryLabel}</span>
-            {r.vendor && <span className="text-muted-2">· {r.vendor}</span>}
-            <span className="ml-auto text-[11px] text-muted-2">{r.hits}×</span>
-            <button
-              onClick={() =>
-                startTransition(async () => {
-                  const res = await removeVendorRuleAction(r.id);
-                  if (res.ok) onChanged();
-                  else onError(res.error);
-                })
-              }
-              disabled={disabled}
-              className="text-muted-2 hover:text-danger disabled:opacity-40"
-            >
-              <X size={14} />
-            </button>
-          </div>
+        {catAdmin.map((c) => (
+          <CategoryCard
+            key={c.key}
+            cat={c}
+            rules={rulesByCat.get(c.key) ?? []}
+            disabled={disabled}
+            act={act}
+          />
         ))}
       </div>
+    </div>
+  );
+}
+
+function CategoryCard({
+  cat,
+  rules,
+  disabled,
+  act,
+}: {
+  cat: CategoryAdminRow;
+  rules: VendorRuleRow[];
+  disabled: boolean;
+  act: (fn: () => Promise<Result>) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [label, setLabel] = useState(cat.label);
+  const [pattern, setPattern] = useState("");
+  const [vendor, setVendor] = useState("");
+
+  return (
+    <div className={`rounded-md border border-border-2 ${cat.active ? "" : "opacity-55"}`}>
+      <div className="flex items-center gap-2 px-3 py-2 text-[12.5px]">
+        <button onClick={() => setExpanded((v) => !v)} className="text-muted-2">
+          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </button>
+        {renaming ? (
+          <input
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            className="min-w-0 flex-1 rounded border border-input px-1.5 py-1 text-[12.5px]"
+          />
+        ) : (
+          <span className="min-w-0 flex-1 truncate font-bold text-ink">{cat.label}</span>
+        )}
+        {cat.system && (
+          <span className="rounded-[8px] bg-chip px-1.5 py-0.5 text-[10px] font-bold text-muted-2">
+            системска
+          </span>
+        )}
+        <span className="rounded-[8px] bg-chip px-1.5 py-0.5 text-[10px] text-muted-2">
+          {rules.length} продавачи
+        </span>
+        {/* recurring toggle */}
+        <label
+          className="flex items-center gap-1 text-[11px] text-muted"
+          title="Фиксен тековен трошок (ТЕКОВНИ ТРОШОЦИ)"
+        >
+          <input
+            type="checkbox"
+            checked={cat.recurring}
+            disabled={disabled}
+            onChange={(e) => act(() => setCategoryRecurringAction(cat.key, e.target.checked))}
+            className="h-3.5 w-3.5"
+          />
+          тековна
+        </label>
+        {renaming ? (
+          <button
+            onClick={() =>
+              act(async () => {
+                const r = await renameCategoryAction(cat.key, label);
+                if (r.ok) setRenaming(false);
+                return r;
+              })
+            }
+            disabled={disabled}
+            className="text-accent hover:opacity-80 disabled:opacity-40"
+          >
+            <Check size={14} />
+          </button>
+        ) : (
+          <button
+            onClick={() => setRenaming(true)}
+            className="text-muted-2 hover:text-ink"
+            title="Преименувај"
+          >
+            <Pencil size={13} />
+          </button>
+        )}
+        {!cat.system && (
+          <button
+            onClick={() => act(() => setCategoryActiveAction(cat.key, !cat.active))}
+            disabled={disabled}
+            className="text-muted-2 hover:text-danger disabled:opacity-40"
+            title={cat.active ? "Деактивирај" : "Активирај"}
+          >
+            {cat.active ? <X size={14} /> : <Check size={14} />}
+          </button>
+        )}
+      </div>
+
+      {expanded && (
+        <div className="border-t border-border-3 px-3 py-2">
+          {rules.length === 0 && (
+            <p className="mb-2 text-[11.5px] text-muted-2">Нема продавачи во оваа категорија.</p>
+          )}
+          <div className="mb-2 flex flex-col gap-1">
+            {rules.map((r) => (
+              <div key={r.id} className="flex items-center gap-2 text-[12px]">
+                <span className="font-semibold text-ink">{r.pattern}</span>
+                {r.vendor && <span className="text-muted-2">· {r.vendor}</span>}
+                <span className="ml-auto text-[11px] text-muted-2">{r.hits}×</span>
+                <button
+                  onClick={() => act(() => removeVendorRuleAction(r.id))}
+                  disabled={disabled}
+                  className="text-muted-2 hover:text-danger disabled:opacity-40"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <input
+              value={pattern}
+              onChange={(e) => setPattern(e.target.value)}
+              placeholder="Шаблон (пр. PETROL или сметка)"
+              className="min-w-[140px] flex-1 rounded border border-input px-2 py-1 text-[12px]"
+            />
+            <input
+              value={vendor}
+              onChange={(e) => setVendor(e.target.value)}
+              placeholder="Продавач (опц.)"
+              className="min-w-[110px] flex-1 rounded border border-input px-2 py-1 text-[12px]"
+            />
+            <button
+              onClick={() =>
+                act(async () => {
+                  const r = await addVendorRuleAction(pattern, cat.key, vendor);
+                  if (r.ok) {
+                    setPattern("");
+                    setVendor("");
+                  }
+                  return r;
+                })
+              }
+              disabled={disabled || pattern.trim().length < 2}
+              className="rounded bg-accent px-3 py-1 text-[12px] font-bold text-white disabled:opacity-40"
+            >
+              Додади продавач
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

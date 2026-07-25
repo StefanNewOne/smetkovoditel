@@ -102,6 +102,7 @@ model Category {
   kind        CategoryKind @default(OPERATING)
   sortOrder   Int          @default(0)
   active      Boolean      @default(true)
+  recurring   Boolean      @default(false) // SM-100: fixed monthly overhead → ТЕКОВНИ ТРОШОЦИ screen
   expenses    Expense[]
   vendorRules VendorRule[]
 }

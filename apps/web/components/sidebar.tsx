@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  CalendarClock,
   Clapperboard,
   Download,
   FileText,
@@ -28,6 +29,7 @@ const ICONS: Record<string, LucideIcon> = {
   Megaphone,
   Wallet,
   Receipt,
+  CalendarClock,
   Clapperboard,
   BarChart3,
   Settings,

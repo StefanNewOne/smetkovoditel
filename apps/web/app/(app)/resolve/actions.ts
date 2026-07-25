@@ -61,7 +61,7 @@ export async function recordLoanAction(
   }
   revalidatePath("/resolve");
   revalidatePath("/import");
-  revalidatePath("/loans");
+  revalidatePath("/recurring");
   return { ok: true, detail: "Запишано како позајмица." };
 }
 

@@ -1,5 +1,5 @@
 import "server-only";
-import { formatMKD } from "@smetko/shared";
+import { currentPeriod, formatMKD } from "@smetko/shared";
 import { prisma } from "@smetko/db";
 
 /** True if `key` is a known, active category (SM-99 — categories are data, validated at runtime). */
@@ -13,14 +13,15 @@ export interface CategoryOption {
 }
 
 /**
- * Categories offered for manual expense categorization / vendor rules (SM-99): active operating +
- * bank categories, ordered by sortOrder. Excludes the workflow-owned pass-through (ADS/ACTORS) and
- * payroll (SALARY/HONORAR) categories — those are never booked from a bank line. Custom categories
- * (kind OPERATING) appear here automatically.
+ * Categories offered for manual expense categorization / vendor rules (SM-99/SM-100): active
+ * categories, ordered by sortOrder, EXCEPT the pass-through billables (ADS/ACTORS — booked only by
+ * their Meta/talent workflows to preserve no-double-billing) and HONORAR (booked by W5 payout).
+ * SALARY IS offered — payroll only calculates, it never books the expense, so the bank salary line is
+ * where salary enters the ledger. Custom + recurring categories appear here automatically.
  */
 export async function getExpenseCategoryOptions(): Promise<CategoryOption[]> {
   const cats = await prisma.category.findMany({
-    where: { active: true, kind: { in: ["OPERATING", "BANK"] } },
+    where: { active: true, kind: { not: "BILLABLE" }, key: { not: "HONORAR" } },
     orderBy: { sortOrder: "asc" },
   });
   return cats.map((c) => ({ value: c.key, label: c.label }));
@@ -58,9 +59,13 @@ export interface ExpenseRow {
 const dt = (d: Date) =>
   new Date(d).toLocaleDateString("mk-MK", { day: "2-digit", month: "2-digit", year: "numeric" });
 
-/** All expenses (SM-90) — where categorized bank lines, cash expenses and pass-throughs are visible. */
+/**
+ * Variable expenses (ТРОШОЦИ, SM-90/SM-100) — everything EXCEPT the fixed recurring overhead, which
+ * lives on the ТЕКОВНИ ТРОШОЦИ screen. Fuel, restaurants, marketing, equipment, one-offs, etc.
+ */
 export async function getExpenses(): Promise<ExpenseRow[]> {
   const expenses = await prisma.expense.findMany({
+    where: { categoryRef: { recurring: false } },
     orderBy: { date: "desc" },
     take: 500,
     include: { client: { select: { name: true } } },
@@ -83,10 +88,11 @@ export interface CategoryTotal {
   count: number;
 }
 
-/** Totals per category — the summary strip above the list. */
+/** Totals per category (variable only — recurring overhead is summarized on ТЕКОВНИ ТРОШОЦИ). */
 export async function getExpenseTotals(): Promise<CategoryTotal[]> {
   const grouped = await prisma.expense.groupBy({
     by: ["category"],
+    where: { categoryRef: { recurring: false } },
     _sum: { amount: true },
     _count: true,
   });
@@ -97,4 +103,61 @@ export async function getExpenseTotals(): Promise<CategoryTotal[]> {
       count: g._count,
     }))
     .sort((a, b) => a.label.localeCompare(b.label, "mk"));
+}
+
+export interface RecurringCostRow {
+  key: string;
+  label: string;
+  current: string; // this period's total
+  previous: string; // previous period's total (for comparison — rent/salary should be steady)
+  currentRaw: number;
+}
+
+/**
+ * Fixed monthly overhead per recurring category (SM-100) for `period` and the prior month — the
+ * predictable "burn baseline" shown on ТЕКОВНИ ТРОШОЦИ. Grouped by expense date (economic month).
+ */
+export async function getRecurringCosts(period = currentPeriod()): Promise<{
+  rows: RecurringCostRow[];
+  total: string;
+  period: string;
+  prevPeriod: string;
+}> {
+  const [y, m] = period.split("-").map(Number);
+  const curStart = new Date(Date.UTC(y!, m! - 1, 1));
+  const curEnd = new Date(Date.UTC(y!, m!, 1));
+  const prevStart = new Date(Date.UTC(y!, m! - 2, 1));
+  const prevPeriod = `${prevStart.getUTCFullYear()}-${String(prevStart.getUTCMonth() + 1).padStart(2, "0")}`;
+
+  const cats = await prisma.category.findMany({
+    where: { recurring: true, active: true },
+    orderBy: { sortOrder: "asc" },
+  });
+  const keys = cats.map((c) => c.key);
+  const [curG, prevG] = await Promise.all([
+    prisma.expense.groupBy({
+      by: ["category"],
+      where: { category: { in: keys }, date: { gte: curStart, lt: curEnd } },
+      _sum: { amount: true },
+    }),
+    prisma.expense.groupBy({
+      by: ["category"],
+      where: { category: { in: keys }, date: { gte: prevStart, lt: curStart } },
+      _sum: { amount: true },
+    }),
+  ]);
+  const cur = new Map(curG.map((g) => [g.category, g._sum.amount ?? 0]));
+  const prev = new Map(prevG.map((g) => [g.category, g._sum.amount ?? 0]));
+  const rows = cats.map((c) => ({
+    key: c.key,
+    label: c.label,
+    current: formatMKD(cur.get(c.key) ?? 0, { decimals: 0 }),
+    previous: formatMKD(prev.get(c.key) ?? 0, { decimals: 0 }),
+    currentRaw: cur.get(c.key) ?? 0,
+  }));
+  const total = formatMKD(
+    rows.reduce((s, r) => s + r.currentRaw, 0),
+    { decimals: 0 },
+  );
+  return { rows, total, period, prevPeriod };
 }

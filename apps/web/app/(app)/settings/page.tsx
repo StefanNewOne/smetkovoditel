@@ -1,11 +1,14 @@
 export const dynamic = "force-dynamic";
 
-import { EXPENSE_CATEGORIES } from "@/lib/resolve";
+import { getExpenseCategoryOptions } from "@/lib/expenses";
 import { getSettingsData } from "@/lib/settings";
 import { SettingsView } from "./settings-view";
 
 export default async function SettingsPage() {
-  const { period, employees, runs, config, vendorRules } = await getSettingsData();
+  const [{ period, employees, runs, config, vendorRules }, categories] = await Promise.all([
+    getSettingsData(),
+    getExpenseCategoryOptions(),
+  ]);
   return (
     <SettingsView
       period={period}
@@ -13,7 +16,7 @@ export default async function SettingsPage() {
       runs={runs}
       config={config}
       vendorRules={vendorRules}
-      categories={EXPENSE_CATEGORIES}
+      categories={categories}
     />
   );
 }

@@ -7,6 +7,25 @@ export async function categoryExists(key: string): Promise<boolean> {
   return (await prisma.category.count({ where: { key, active: true } })) > 0;
 }
 
+export interface CategoryOption {
+  value: string;
+  label: string;
+}
+
+/**
+ * Categories offered for manual expense categorization / vendor rules (SM-99): active operating +
+ * bank categories, ordered by sortOrder. Excludes the workflow-owned pass-through (ADS/ACTORS) and
+ * payroll (SALARY/HONORAR) categories — those are never booked from a bank line. Custom categories
+ * (kind OPERATING) appear here automatically.
+ */
+export async function getExpenseCategoryOptions(): Promise<CategoryOption[]> {
+  const cats = await prisma.category.findMany({
+    where: { active: true, kind: { in: ["OPERATING", "BANK"] } },
+    orderBy: { sortOrder: "asc" },
+  });
+  return cats.map((c) => ({ value: c.key, label: c.label }));
+}
+
 /** Default labels for the seeded categories — fallback when a DB label isn't loaded. */
 export const CATEGORY_LABEL: Record<string, string> = {
   OPERATIONS: "Оперативни",

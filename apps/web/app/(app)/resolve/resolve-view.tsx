@@ -2,14 +2,52 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { FileText } from "lucide-react";
 import type {
   CategoryOption,
   ChargeOption,
   ClientOption,
   ExpenseLineItem,
+  LineSource,
   PaymentItem,
 } from "@/lib/resolve";
-import { categorizeLineAction, fifoAction, ignoreLineAction, matchPaymentAction } from "./actions";
+import {
+  categorizeLineAction,
+  fifoAction,
+  ignoreLineAction,
+  linkAccountAction,
+  matchPaymentAction,
+} from "./actions";
+
+/** Source-document context for a Решавање row: statement № + date + payer/payee account + PDF link. */
+function SourceLine({ src }: { src: LineSource }) {
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-2">
+      <span className="font-semibold text-muted">Извод {src.statementNumber}</span>
+      <span>· {src.date}</span>
+      {src.account && <span className="truncate">· {src.account}</span>}
+      {src.pdfUrl ? (
+        <a
+          href={src.pdfUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="ml-auto flex items-center gap-1 rounded border border-border px-1.5 py-0.5 font-bold text-accent hover:bg-accent-50"
+        >
+          <FileText size={11} /> Види извод
+        </a>
+      ) : (
+        src.pdfName && (
+          <span
+            title={`Оригиналот е импортиран од диск: ${src.pdfName}`}
+            className="ml-auto flex items-center gap-1 text-muted-2"
+          >
+            <FileText size={11} /> {src.pdfName}
+          </span>
+        )
+      )}
+    </div>
+  );
+}
 
 export function ResolveView({
   payments,
@@ -82,6 +120,7 @@ export function ResolveView({
                   openCharges={openCharges}
                   pending={pending}
                   onMatch={(chargeId) => run(() => matchPaymentAction(p.id, chargeId))}
+                  onLinkAccount={(clientId) => run(() => linkAccountAction(p.id, clientId))}
                 />
               ))}
             </div>
@@ -126,12 +165,14 @@ function PaymentRow({
   openCharges,
   pending,
   onMatch,
+  onLinkAccount,
 }: {
   item: PaymentItem;
   clients: ClientOption[];
   openCharges: ChargeOption[];
   pending: boolean;
   onMatch: (chargeId: string) => void;
+  onLinkAccount: (clientId: string) => void;
 }) {
   const [clientId, setClientId] = useState(item.suggestedClientId ?? "");
   const [chargeId, setChargeId] = useState("");
@@ -150,6 +191,7 @@ function PaymentRow({
         <span className="font-semibold text-success-700">{item.amount}</span>
       </div>
       {item.context && <p className="mt-0.5 truncate text-[11px] text-muted-2">{item.context}</p>}
+      <SourceLine src={item} />
       {item.suggestedClientName && (
         <p className="mt-0.5 text-[11px] font-bold text-success-700">
           → {item.suggestedClientName}
@@ -209,6 +251,16 @@ function PaymentRow({
           </button>
         </div>
       )}
+      {clientId && item.hasAccount && (
+        <button
+          onClick={() => onLinkAccount(clientId)}
+          disabled={pending}
+          title="Ја поврзува сметката на плаќачот со клиентот и ја раздолжува најстарата отворена фактура (FIFO). Идните уплати од таа сметка се раздолжуваат автоматски."
+          className="mt-1.5 w-full rounded border border-accent-200 px-2 py-1 text-[11px] font-bold text-accent hover:bg-accent-50 disabled:opacity-40"
+        >
+          Поврзи ја сметката со клиентот → раздолжи (FIFO)
+        </button>
+      )}
     </div>
   );
 }
@@ -235,7 +287,11 @@ function ExpenseRow({
         <span className="min-w-0 flex-1 truncate text-ink">{item.title}</span>
         <span className="font-semibold text-muted">{item.amount}</span>
       </div>
-      {item.context && <p className="mt-0.5 truncate text-[11px] text-muted-2">{item.context}</p>}
+      <p className="mt-0.5 truncate text-[11px] text-muted-2">
+        {item.context}
+        {item.bankRef ? ` · ${item.bankRef}` : ""}
+      </p>
+      <SourceLine src={item} />
 
       <div className="mt-1.5 flex items-center gap-1.5">
         <select

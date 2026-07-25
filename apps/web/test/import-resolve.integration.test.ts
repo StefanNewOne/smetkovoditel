@@ -2,7 +2,12 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
 import { PeriodClosedError } from "@/lib/period-guard";
-import { ignoreStatementLine, ingestStatement, manualMatchStatementLine } from "@/lib/workflows/w2";
+import {
+  ignoreStatementLine,
+  ingestStatement,
+  linkAccountAndSettle,
+  manualMatchStatementLine,
+} from "@/lib/workflows/w2";
 import { approveInvoice, generateCharges } from "@/lib/workflows/w1";
 import { prisma, resetDb } from "./setup/db";
 import { createInvoiceClient } from "./setup/factories";
@@ -59,6 +64,66 @@ describe("manual match (fix #1)", () => {
     await expect(manualMatchStatementLine(line.id, charge.id, userId)).rejects.toBeInstanceOf(
       PeriodClosedError,
     );
+  });
+});
+
+/** A raw unmatched incoming line carrying only the payer's giro account (no повик) — the case the
+ *  Решавање "link account → settle" flow resolves (SM-99 phase B). */
+async function unmatchedLineWithAccount(amount: number, account: string) {
+  const bank = await prisma.bankAccount.findFirstOrThrow();
+  const imp = await prisma.bankStatementImport.create({
+    data: {
+      bankAccountId: bank.id,
+      statementNumber: 900,
+      statementDate: new Date(Date.UTC(2026, 6, 10)),
+      source: "MANUAL_UPLOAD",
+      fileRef: "local:test.pdf",
+      openingBalance: 0,
+      totalDebit: 0,
+      totalCredit: amount,
+      closingBalance: amount,
+      orderCount: 1,
+      status: "PARSED",
+    },
+  });
+  return prisma.statementLine.create({
+    data: {
+      importId: imp.id,
+      lineHash: `h:${account}:${amount}`,
+      date: new Date(Date.UTC(2026, 6, 10)),
+      amount,
+      direction: "IN",
+      counterpartyAccount: account,
+      description: "",
+      processed: false,
+    },
+  });
+}
+
+describe("link account + settle (SM-99)", () => {
+  it("links the payer account to a client and FIFO-settles their oldest open invoice", async () => {
+    const client = await createInvoiceClient({ userId, monthlyAmount: 2_000_000 });
+    await generateCharges(PERIOD, userId);
+    const charge = await prisma.charge.findFirstOrThrow({ where: { clientId: client.id } });
+    await approveInvoice(charge.id, userId);
+    const total = (await prisma.charge.findUniqueOrThrow({ where: { id: charge.id } })).total;
+    const line = await unmatchedLineWithAccount(total, "300-0000000042-42");
+    expect(line.processed).toBe(false);
+
+    const { settled } = await linkAccountAndSettle(line.id, client.id, userId);
+
+    expect(settled).toBe(1);
+    const acc = await prisma.clientBankAccount.findUnique({
+      where: { account: "300-0000000042-42" },
+    });
+    expect(acc?.clientId).toBe(client.id); // account now linked → future payments auto-settle
+    const after = await prisma.charge.findUniqueOrThrow({ where: { id: charge.id } });
+    expect(after.status).toBe("PAID");
+    expect(after.paidAmount).toBe(total);
+    const resolved = await prisma.statementLine.findUniqueOrThrow({ where: { id: line.id } });
+    expect(resolved.processed).toBe(true);
+    const audit = await prisma.auditLog.findFirst({ where: { action: "account.linked" } });
+    expect(audit).not.toBeNull();
   });
 });
 

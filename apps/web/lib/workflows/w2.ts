@@ -168,6 +168,41 @@ export async function runFifoOnUnmatched(userId: string): Promise<number> {
   return settled;
 }
 
+/**
+ * SM-99 phase B — link a payer's giro account to a client from a Решавање row, then run FIFO so the
+ * payment(s) from that account settle the client's oldest open invoice (generalizes the manual
+ * account→client fix into the UI). Future payments from the same account auto-settle on import.
+ */
+export async function linkAccountAndSettle(
+  lineId: string,
+  clientId: string,
+  userId: string,
+): Promise<{ settled: number }> {
+  const line = await prisma.statementLine.findUnique({ where: { id: lineId } });
+  const account = line?.counterpartyAccount;
+  if (!account) throw new Error("Линијата нема сметка на плаќач за поврзување.");
+  const client = await prisma.client.findUnique({ where: { id: clientId } });
+  if (!client) throw new Error("Клиентот не постои.");
+
+  await prisma.$transaction(async (tx) => {
+    await tx.clientBankAccount.upsert({
+      where: { account },
+      update: { clientId },
+      create: { clientId, account, label: "Плаќачка сметка" },
+    });
+    await writeAudit(tx, {
+      entity: "ClientBankAccount",
+      entityId: account,
+      action: "account.linked",
+      diff: { clientId, lineId },
+      userId,
+    });
+  });
+
+  const settled = await runFifoOnUnmatched(userId);
+  return { settled };
+}
+
 export async function ingestStatementPdf(
   buffer: Buffer,
   fileRef: string,

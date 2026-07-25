@@ -1,6 +1,8 @@
 import "server-only";
 import { formatMKD } from "@smetko/shared";
 import { prisma } from "@smetko/db";
+import { attachmentRef } from "@/lib/attachments";
+import { getExpenseCategoryOptions } from "@/lib/expenses";
 
 /**
  * Data for the Решавање screen (SM-81): the two resolution queues from the bank statements —
@@ -17,43 +19,37 @@ export interface ChargeOption {
   clientId: string;
   label: string; // "1-86/2026 · остаток 85.845"
 }
-export interface PaymentItem {
+/** Source-document context shared by both resolve queues (SM-99 phase B) — makes each row readable. */
+export interface LineSource {
+  statementNumber: number;
+  date: string;
+  account: string | null; // counterparty giro (payer/payee) — the reliable key (Cyrillic names garble)
+  pdfUrl: string | null; // servable "Види извод" link, or null for historical local: refs
+  pdfName: string | null; // filename fallback when the PDF is not served in-app
+}
+export interface PaymentItem extends LineSource {
   id: string;
   amount: string;
   title: string;
   context: string;
+  hasAccount: boolean; // an account is present → offer "link account to client + settle (FIFO)"
   suggestedChargeId?: string; // open charge whose remaining balance exactly equals this payment
   suggestedClientId?: string; // client inferred from the payer (SM-82) — pre-selects the picker
   suggestedClientName?: string; // shown so the user sees who paid (SM-90)
 }
-export interface ExpenseLineItem {
+export interface ExpenseLineItem extends LineSource {
   id: string;
   amount: string;
   title: string;
   context: string;
+  bankRef: string | null; // card auth code ("Податоци за рекламација")
   classifiedAs?: string;
 }
-export interface CategoryOption {
-  value: string;
-  label: string;
-}
-
-/** Operating-expense categories offered for manual categorization (verbatim Macedonian). ADS/ACTORS/
- *  SALARY/HONORAR are excluded — those are booked by their own workflows, never from a bank line. */
-export const EXPENSE_CATEGORIES: CategoryOption[] = [
-  { value: "FUEL", label: "Гориво" },
-  { value: "REPRESENTATION", label: "Кафани / ресторани" },
-  { value: "MARKETING", label: "Маркетинг" },
-  { value: "RENT", label: "Кирија" },
-  { value: "UTILITIES", label: "Комуналии" },
-  { value: "PHONE", label: "Телефон / интернет" },
-  { value: "EQUIPMENT", label: "Опрема" },
-  { value: "BANK_FEES", label: "Банкарски провизии" },
-  { value: "OPERATIONS", label: "Оперативни" },
-  { value: "OTHER", label: "Друго" },
-];
+export type { CategoryOption } from "@/lib/expenses";
 
 const d0 = (n: number) => formatMKD(n, { decimals: 0 });
+const dt = (d: Date) =>
+  new Date(d).toLocaleDateString("mk-MK", { day: "2-digit", month: "2-digit", year: "numeric" });
 
 const norm = (s: string) =>
   s
@@ -63,16 +59,19 @@ const norm = (s: string) =>
     .trim();
 
 export async function getResolveCenter() {
-  const [qPayments, qExpenses, clients, open, history, giro] = await Promise.all([
+  const withImport = { import: { select: { statementNumber: true, fileRef: true } } };
+  const [qPayments, qExpenses, clients, open, history, giro, categories] = await Promise.all([
     prisma.statementLine.findMany({
       where: { processed: false, direction: "IN" },
       orderBy: { amount: "desc" },
       take: 200,
+      include: withImport,
     }),
     prisma.statementLine.findMany({
       where: { processed: false, direction: "OUT", classifiedAs: { in: ["CARD_TX", "OTHER"] } },
       orderBy: { date: "desc" },
       take: 200,
+      include: withImport,
     }),
     prisma.client.findMany({
       where: { status: { in: ["ACTIVE", "PAUSED"] } },
@@ -103,6 +102,7 @@ export async function getResolveCenter() {
     }),
     // SM-90: explicit client giro accounts — the authoritative account → client mapping.
     prisma.clientBankAccount.findMany({ select: { account: true, clientId: true } }),
+    getExpenseCategoryOptions(),
   ]);
 
   const clientNameById = new Map(clients.map((c) => [c.id, c.name] as const));
@@ -147,7 +147,12 @@ export async function getResolveCenter() {
       id: l.id,
       amount: `+${d0(l.amount)}`,
       title: l.reference ? `Уплата (повик ${l.reference})` : "Уплата без повик",
-      context: l.counterpartyAccount ?? payer ?? l.description ?? "",
+      context: payer ?? l.description ?? "",
+      statementNumber: l.import.statementNumber,
+      date: dt(l.date),
+      account: l.counterpartyAccount,
+      hasAccount: !!l.counterpartyAccount,
+      ...attachmentRef(l.import.fileRef),
       suggestedChargeId: exact && exact.length === 1 ? exact[0]!.id : undefined,
       suggestedClientId: clientId,
       suggestedClientName: clientId ? clientNameById.get(clientId) : undefined,
@@ -157,10 +162,15 @@ export async function getResolveCenter() {
   const expenses: ExpenseLineItem[] = qExpenses.map((l) => ({
     id: l.id,
     amount: `−${d0(l.amount)}`,
-    title: l.counterpartyName || l.description || l.classifiedAs || "Извод-линија",
-    context: `${l.classifiedAs ?? "?"} · ${l.counterpartyAccount ?? ""}`,
+    title: l.description || l.counterpartyName || l.classifiedAs || "Извод-линија",
+    context: l.classifiedAs === "CARD_TX" ? "Картична" : "Трансфер",
+    statementNumber: l.import.statementNumber,
+    date: dt(l.date),
+    account: l.counterpartyAccount,
+    bankRef: l.bankRef,
+    ...attachmentRef(l.import.fileRef),
     classifiedAs: l.classifiedAs ?? undefined,
   }));
 
-  return { payments, expenses, clients, openCharges, categories: EXPENSE_CATEGORIES };
+  return { payments, expenses, clients, openCharges, categories };
 }

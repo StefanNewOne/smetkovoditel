@@ -1,6 +1,7 @@
 import "server-only";
 import { formatMKD } from "@smetko/shared";
 import { prisma } from "@smetko/db";
+import { attachmentRef } from "@/lib/attachments";
 
 export interface StatementRow {
   id: string;
@@ -31,25 +32,6 @@ export interface MetaReceiptRow {
   matchStatus: string;
   pdfUrl: string | null;
   pdfName: string | null;
-}
-
-/**
- * Resolve a stored attachment reference for display. Files uploaded via the app (or Gmail worker)
- * carry a servable `/api/attachments/<name>` URL; historical bulk-imported docs carry a `local:<file>`
- * marker whose bytes live on disk, not in the app — those are shown by name only, not linked.
- */
-function attachment(ref: string | null | undefined): {
-  pdfUrl: string | null;
-  pdfName: string | null;
-} {
-  if (!ref) return { pdfUrl: null, pdfName: null };
-  if (ref.startsWith("/api/attachments/")) return { pdfUrl: ref, pdfName: null };
-  const name =
-    ref
-      .replace(/^local:/, "")
-      .split(/[\\/]/)
-      .pop() || ref;
-  return { pdfUrl: null, pdfName: name };
 }
 
 export interface ChargeOption {
@@ -152,7 +134,7 @@ export async function getImportCenter() {
     lineCount: s._count.lines,
     status: s.status,
     integrityOk: s.status === "PARSED" && s._count.lines === s.orderCount,
-    ...attachment(s.fileRef),
+    ...attachmentRef(s.fileRef),
   }));
 
   const clientLabel = (c: { name: string; number: number | null } | null | undefined) =>
@@ -172,7 +154,7 @@ export async function getImportCenter() {
       date: dt(r.invoiceDate),
       parseStatus: r.parseStatus,
       matchStatus: r.matchStatus,
-      ...attachment(r.attachmentUrl),
+      ...attachmentRef(r.attachmentUrl),
     };
   });
 

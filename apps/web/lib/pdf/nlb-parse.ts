@@ -20,9 +20,6 @@ const FACEBK = /FACEBK\s*\*+\s*([A-Z0-9]{6,})/;
 const INVOICE_REF = /(\d-\d{1,4}\/\d{4})/;
 const ACCOUNT = /(\d{3}-\d{10}-\d{2})/g;
 const ACCOUNT_TOKEN = /^\d{3}-\d{10}-\d{2}$/;
-/** The payer account of an incoming transfer renders at/below the amount, outside the tight
- *  classify window. Window (units, at-or-below the amount) for the nearest full account token. */
-const PAYER_WINDOW = 30;
 const CARD = /MBDP:(\d{4}):/;
 const BANK_REF = /(87BXS\d+)/;
 /** Debit column ≈ x275–290, credit column ≈ x355–365 → split at 325 (validated on 152 statements). */
@@ -135,20 +132,21 @@ function buildLines(toks: Tok[], statementNumber: number | null): NlbLine[] {
       .map((m) => m[1]!)
       .filter((a) => a !== OWN_ACCOUNT);
     const hashAccount = accounts[0] ?? null; // narrow window — feeds lineHash (kept byte-stable)
-    // SM-82: the payer account of an incoming transfer sits at/below the amount, outside the tight
-    // classify window. Take the nearest full account token AT OR BELOW the amount (excludes the
-    // transaction above), for the STORED counterparty only — never the hash. Suggestion metadata,
-    // human-confirmed, so a stray pick is harmless (never auto-books).
-    const payerAccount =
-      toks
-        .filter(
-          (t) =>
-            amtTok.y - t.y >= 0 &&
-            amtTok.y - t.y <= PAYER_WINDOW &&
-            ACCOUNT_TOKEN.test(t.s) &&
-            t.s !== OWN_ACCOUNT,
-        )
-        .sort((a, b) => amtTok.y - a.y - (amtTok.y - b.y))[0]?.s ?? null;
+    // SM-101: the payer account of an incoming transfer renders at/below the amount and can WRAP to
+    // the top of the next page (out of any y-window — the ±100k per-page offset makes it unreachable).
+    // Scan forward in reading order for the nearest account token before the next money token, so a
+    // page-straddling transaction still resolves its account. Stored counterparty only, never the
+    // hash — suggestion metadata, human-confirmed, so a stray pick never auto-books.
+    let payerAccount: string | null = null;
+    const amtPos = sorted.indexOf(amtTok);
+    for (let i = amtPos + 1; i < sorted.length; i++) {
+      const t = sorted[i]!;
+      if (MONEY.test(t.s)) break; // reached the next transaction / footer total
+      if (ACCOUNT_TOKEN.test(t.s) && t.s !== OWN_ACCOUNT) {
+        payerAccount = t.s;
+        break;
+      }
+    }
     const counterpartyAccount = payerAccount ?? hashAccount;
 
     let classifiedAs: NlbLine["classifiedAs"];

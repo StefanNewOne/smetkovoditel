@@ -60,50 +60,54 @@ const norm = (s: string) =>
 
 export async function getResolveCenter() {
   const withImport = { import: { select: { statementNumber: true, fileRef: true } } };
-  const [qPayments, qExpenses, clients, open, history, giro, categories] = await Promise.all([
-    prisma.statementLine.findMany({
-      where: { processed: false, direction: "IN" },
-      orderBy: { amount: "desc" },
-      take: 200,
-      include: withImport,
-    }),
-    prisma.statementLine.findMany({
-      where: { processed: false, direction: "OUT", classifiedAs: { in: ["CARD_TX", "OTHER"] } },
-      orderBy: { date: "desc" },
-      take: 200,
-      include: withImport,
-    }),
-    prisma.client.findMany({
-      where: { status: { in: ["ACTIVE", "PAUSED"] } },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
-    prisma.charge.findMany({
-      where: {
-        kind: "INVOICE",
-        invoiceNumber: { not: null },
-        status: { in: ["OPEN", "PARTIALLY_PAID", "OVERDUE"] },
-      },
-      include: { client: { select: { id: true, name: true } } },
-      orderBy: { seqInMonth: "desc" },
-      take: 500,
-    }),
-    // SM-82: learn payer account → client from already-matched incoming payments, so the next
-    // payment from the same account auto-suggests that client (Cyrillic payer names are unreadable
-    // in the PDF font — the account number is the reliable key).
-    prisma.statementLine.findMany({
-      where: {
-        direction: "IN",
-        processed: true,
-        counterpartyAccount: { not: null },
-        payment: { isNot: null },
-      },
-      select: { counterpartyAccount: true, payment: { select: { clientId: true } } },
-    }),
-    // SM-90: explicit client giro accounts — the authoritative account → client mapping.
-    prisma.clientBankAccount.findMany({ select: { account: true, clientId: true } }),
-    getExpenseCategoryOptions(),
-  ]);
+  const [qPayments, qExpenses, clients, open, history, giro, categories, lenderRows] =
+    await Promise.all([
+      prisma.statementLine.findMany({
+        where: { processed: false, direction: "IN" },
+        orderBy: { amount: "desc" },
+        take: 200,
+        include: withImport,
+      }),
+      prisma.statementLine.findMany({
+        where: { processed: false, direction: "OUT", classifiedAs: { in: ["CARD_TX", "OTHER"] } },
+        orderBy: { date: "desc" },
+        take: 200,
+        include: withImport,
+      }),
+      prisma.client.findMany({
+        where: { status: { in: ["ACTIVE", "PAUSED"] } },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      prisma.charge.findMany({
+        where: {
+          kind: "INVOICE",
+          invoiceNumber: { not: null },
+          status: { in: ["OPEN", "PARTIALLY_PAID", "OVERDUE"] },
+        },
+        include: { client: { select: { id: true, name: true } } },
+        orderBy: { seqInMonth: "desc" },
+        take: 500,
+      }),
+      // SM-82: learn payer account → client from already-matched incoming payments, so the next
+      // payment from the same account auto-suggests that client (Cyrillic payer names are unreadable
+      // in the PDF font — the account number is the reliable key).
+      prisma.statementLine.findMany({
+        where: {
+          direction: "IN",
+          processed: true,
+          counterpartyAccount: { not: null },
+          payment: { isNot: null },
+        },
+        select: { counterpartyAccount: true, payment: { select: { clientId: true } } },
+      }),
+      // SM-90: explicit client giro accounts — the authoritative account → client mapping.
+      prisma.clientBankAccount.findMany({ select: { account: true, clientId: true } }),
+      getExpenseCategoryOptions(),
+      // SM-100: distinct loan lenders, for the "mark as loan" autocomplete.
+      prisma.loanEntry.findMany({ distinct: ["lenderName"], select: { lenderName: true } }),
+    ]);
+  const lenders = lenderRows.map((l) => l.lenderName).sort((a, b) => a.localeCompare(b, "mk"));
 
   const clientNameById = new Map(clients.map((c) => [c.id, c.name] as const));
   // account → client: giro accounts are authoritative (owner-entered); matched-payment history
@@ -172,5 +176,5 @@ export async function getResolveCenter() {
     classifiedAs: l.classifiedAs ?? undefined,
   }));
 
-  return { payments, expenses, clients, openCharges, categories };
+  return { payments, expenses, clients, openCharges, categories, lenders };
 }

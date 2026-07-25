@@ -413,6 +413,7 @@ model StatementLine {
   payment             Payment?
   expense             Expense?
   adSpendReceipt      AdSpendReceipt?
+  loanEntry           LoanEntry?
 
   @@index([importId])
 }
@@ -489,6 +490,28 @@ model Period {
   closedAt    DateTime?
   closedById  String?
   cashEntries CashLedgerEntry[]
+  loanEntries LoanEntry[]
+}
+
+// SM-100: owner/private-person loans to the company (financing flow — a liability, not revenue or
+// expense). IN = received (позајмица примена), OUT = repaid (поврат). Never touches Charges/Expenses
+// or P&L; the outstanding balance per lender = Σ IN − Σ OUT. Rule #1: linked to its bank line.
+model LoanEntry {
+  id              String         @id @default(cuid())
+  lenderName      String
+  direction       Direction // IN = примена (фирмата прима), OUT = поврат (фирмата враќа)
+  amount          Int // дени
+  date            DateTime
+  note            String?
+  attachmentUrl   String? // договор за заем (по желба)
+  statementLineId String?        @unique
+  statementLine   StatementLine? @relation(fields: [statementLineId], references: [id])
+  periodId        String
+  period          Period         @relation(fields: [periodId], references: [id])
+  createdById     String
+  createdAt       DateTime       @default(now())
+
+  @@index([lenderName])
 }
 
 model AuditLog {

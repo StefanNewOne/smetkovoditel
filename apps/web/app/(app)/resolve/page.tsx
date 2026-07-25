@@ -4,7 +4,8 @@ import { getResolveCenter } from "@/lib/resolve";
 import { ResolveView } from "./resolve-view";
 
 export default async function ResolvePage() {
-  const { payments, expenses, clients, openCharges, categories } = await getResolveCenter();
+  const { payments, expenses, clients, openCharges, categories, lenders } =
+    await getResolveCenter();
   return (
     <ResolveView
       payments={payments}
@@ -12,6 +13,7 @@ export default async function ResolvePage() {
       clients={clients}
       openCharges={openCharges}
       categories={categories}
+      lenders={lenders}
     />
   );
 }

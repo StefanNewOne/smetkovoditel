@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { categoryExists } from "@/lib/expenses";
+import { recordLoanFromLine } from "@/lib/loans";
 import { requireWriter } from "@/lib/rbac";
 import {
   categorizeStatementLine,
@@ -43,6 +44,25 @@ export async function linkAccountAction(lineId: string, clientId: string): Promi
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Поврзувањето не успеа." };
   }
+}
+
+/** Record a bank line as an owner loan movement (IN = received, OUT = repaid) — not revenue/expense. */
+export async function recordLoanAction(
+  lineId: string,
+  lenderName: string,
+  note: string,
+): Promise<ActionResult> {
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  try {
+    await recordLoanFromLine(lineId, lenderName, note || null, auth.user.id);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Записот не успеа." };
+  }
+  revalidatePath("/resolve");
+  revalidatePath("/import");
+  revalidatePath("/loans");
+  return { ok: true, detail: "Запишано како позајмица." };
 }
 
 /** Match an incoming payment to a chosen open charge of the paying client (period-guarded B9). */

@@ -17,7 +17,70 @@ import {
   ignoreLineAction,
   linkAccountAction,
   matchPaymentAction,
+  recordLoanAction,
 } from "./actions";
+
+/** Mark a line as a loan movement (SM-100): expands to a lender-name input, then records it. IN →
+ *  "позајмица (примена)", OUT → "поврат на позајмица" — the direction is fixed by the line. */
+function LoanControl({
+  label,
+  pending,
+  onLoan,
+}: {
+  label: string;
+  pending: boolean;
+  onLoan: (lender: string, note: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [lender, setLender] = useState("");
+  const [note, setNote] = useState("");
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        disabled={pending}
+        className="mt-1.5 w-full rounded border border-border px-2 py-1 text-[11px] font-semibold text-muted hover:bg-chip disabled:opacity-40"
+      >
+        {label}
+      </button>
+    );
+  }
+  return (
+    <div className="mt-1.5 flex flex-col gap-1.5 rounded border border-border-2 bg-surface p-2">
+      <p className="text-[11px] font-bold text-ink">{label}</p>
+      <input
+        value={lender}
+        onChange={(e) => setLender(e.target.value)}
+        placeholder="Име на заемодавач (приватно лице)"
+        list="loan-lenders"
+        className="rounded border border-input px-1.5 py-1 text-[11px]"
+      />
+      <input
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="Забелешка (по желба)"
+        className="rounded border border-input px-1.5 py-1 text-[11px]"
+      />
+      <div className="flex items-center gap-1.5">
+        <button
+          onClick={() => lender.trim() && onLoan(lender.trim(), note)}
+          disabled={pending || lender.trim().length < 2}
+          className="flex-1 rounded bg-accent px-2 py-1 text-[11px] font-bold text-white disabled:opacity-40"
+        >
+          Запиши
+        </button>
+        <button
+          onClick={() => setOpen(false)}
+          disabled={pending}
+          className="rounded border border-border px-2 py-1 text-[11px] font-semibold text-muted"
+        >
+          Откажи
+        </button>
+      </div>
+    </div>
+  );
+}
 
 /** Source-document context for a Решавање row: statement № + date + payer/payee account + PDF link. */
 function SourceLine({ src }: { src: LineSource }) {
@@ -55,12 +118,14 @@ export function ResolveView({
   clients,
   openCharges,
   categories,
+  lenders,
 }: {
   payments: PaymentItem[];
   expenses: ExpenseLineItem[];
   clients: ClientOption[];
   openCharges: ChargeOption[];
   categories: CategoryOption[];
+  lenders: string[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -78,6 +143,11 @@ export function ResolveView({
 
   return (
     <div className="flex flex-col gap-4">
+      <datalist id="loan-lenders">
+        {lenders.map((l) => (
+          <option key={l} value={l} />
+        ))}
+      </datalist>
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-[16px] font-extrabold text-ink">Решавање</h2>
@@ -121,6 +191,7 @@ export function ResolveView({
                   pending={pending}
                   onMatch={(chargeId) => run(() => matchPaymentAction(p.id, chargeId))}
                   onLinkAccount={(clientId) => run(() => linkAccountAction(p.id, clientId))}
+                  onLoan={(lender, note) => run(() => recordLoanAction(p.id, lender, note))}
                 />
               ))}
             </div>
@@ -149,6 +220,7 @@ export function ResolveView({
                     run(() => categorizeLineAction(e.id, cat, remember))
                   }
                   onIgnore={() => run(() => ignoreLineAction(e.id))}
+                  onLoan={(lender, note) => run(() => recordLoanAction(e.id, lender, note))}
                 />
               ))}
             </div>
@@ -166,6 +238,7 @@ function PaymentRow({
   pending,
   onMatch,
   onLinkAccount,
+  onLoan,
 }: {
   item: PaymentItem;
   clients: ClientOption[];
@@ -173,6 +246,7 @@ function PaymentRow({
   pending: boolean;
   onMatch: (chargeId: string) => void;
   onLinkAccount: (clientId: string) => void;
+  onLoan: (lender: string, note: string) => void;
 }) {
   const [clientId, setClientId] = useState(item.suggestedClientId ?? "");
   const [chargeId, setChargeId] = useState("");
@@ -261,6 +335,7 @@ function PaymentRow({
           Поврзи ја сметката со клиентот → раздолжи (FIFO)
         </button>
       )}
+      <LoanControl label="Позајмица (примена)" pending={pending} onLoan={onLoan} />
     </div>
   );
 }
@@ -271,12 +346,14 @@ function ExpenseRow({
   pending,
   onCategorize,
   onIgnore,
+  onLoan,
 }: {
   item: ExpenseLineItem;
   categories: CategoryOption[];
   pending: boolean;
   onCategorize: (category: string, rememberVendor: boolean) => void;
   onIgnore: () => void;
+  onLoan: (lender: string, note: string) => void;
 }) {
   const [category, setCategory] = useState("");
   const [remember, setRemember] = useState(true);
@@ -332,6 +409,7 @@ function ExpenseRow({
           Игнорирај
         </button>
       </div>
+      <LoanControl label="Поврат на позајмица" pending={pending} onLoan={onLoan} />
     </div>
   );
 }

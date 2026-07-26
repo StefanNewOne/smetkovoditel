@@ -391,7 +391,8 @@ function ExpenseGroupCard({
   onIgnore: (lineId: string) => void;
   onLoan: (lineId: string, kind: string, lender: string, note: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  // Expanded by default so every expense shows its "Види извод" link (SM); collapse to bulk-categorize.
+  const [expanded, setExpanded] = useState(true);
   const [bulkCat, setBulkCat] = useState("");
   const [learn, setLearn] = useState(true);
 

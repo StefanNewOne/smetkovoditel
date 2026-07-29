@@ -27,7 +27,12 @@ export async function getExpenseCategoryOptions(): Promise<CategoryOption[]> {
   return cats.map((c) => ({ value: c.key, label: c.label }));
 }
 
-/** Default labels for the seeded categories — fallback when a DB label isn't loaded. */
+/**
+ * Default labels for the seeded categories — fallback ONLY when a DB label isn't loaded. The
+ * authoritative label is `Category.label` (editable, and custom categories like "Маркети" exist
+ * only there). Never resolve a display label from this map alone, or custom categories render as
+ * their raw key (`CAT_…`).
+ */
 export const CATEGORY_LABEL: Record<string, string> = {
   OPERATIONS: "Оперативни",
   ADS: "Реклами (Meta)",
@@ -68,12 +73,13 @@ export async function getExpenses(): Promise<ExpenseRow[]> {
     where: { categoryRef: { recurring: false } },
     orderBy: { date: "desc" },
     take: 500,
-    include: { client: { select: { name: true } } },
+    include: { client: { select: { name: true } }, categoryRef: { select: { label: true } } },
   });
   return expenses.map((e) => ({
     id: e.id,
     date: dt(e.date),
-    categoryLabel: CATEGORY_LABEL[e.category] ?? e.category,
+    // authoritative label from the Category table (custom categories only live there), key as last resort
+    categoryLabel: e.categoryRef?.label ?? CATEGORY_LABEL[e.category] ?? e.category,
     vendor: e.vendor,
     amount: formatMKD(e.amount, { decimals: 0 }),
     channel: e.paymentChannel,
@@ -90,15 +96,20 @@ export interface CategoryTotal {
 
 /** Totals per category (variable only — recurring overhead is summarized on ТЕКОВНИ ТРОШОЦИ). */
 export async function getExpenseTotals(): Promise<CategoryTotal[]> {
-  const grouped = await prisma.expense.groupBy({
-    by: ["category"],
-    where: { categoryRef: { recurring: false } },
-    _sum: { amount: true },
-    _count: true,
-  });
+  const [grouped, cats] = await Promise.all([
+    prisma.expense.groupBy({
+      by: ["category"],
+      where: { categoryRef: { recurring: false } },
+      _sum: { amount: true },
+      _count: true,
+    }),
+    // groupBy can't join the relation — resolve labels from the Category table separately.
+    prisma.category.findMany({ select: { key: true, label: true } }),
+  ]);
+  const labelByKey = new Map(cats.map((c) => [c.key, c.label]));
   return grouped
     .map((g) => ({
-      label: CATEGORY_LABEL[g.category] ?? g.category,
+      label: labelByKey.get(g.category) ?? CATEGORY_LABEL[g.category] ?? g.category,
       total: formatMKD(g._sum.amount ?? 0, { decimals: 0 }),
       count: g._count,
     }))

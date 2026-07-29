@@ -1,7 +1,7 @@
 # SM-103 — Dashboard (жив почетен екран)
 
 **Type:** Feature · **Master Plan ref:** §9.1, handoff §1 · **Scope:** `ui`, `reports`
-**Status:** Plan — awaiting developer approval before implementation.
+**Status:** ✅ Implemented (2026-07-29). `lib/dashboard.ts` + `dashboard/page.tsx` + `dashboard.integration.test.ts` (2 tests green, typecheck + lint clean, real-DB numbers verified).
 
 ## Problem
 

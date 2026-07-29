@@ -162,7 +162,7 @@ scare investigated and cleared (every expense traces 1:1 to a distinct bank line
 | ------ | ------------ | -------------------------------------------------------------------------------------------------------------------------- | ----------- | ------ |
 | SM-99  | Bug          | Трошоци rendered custom category keys (`CAT_…`) — resolve label from `Category.label`, static map fallback                 | §4.2, SM-99 | ☑      |
 | SM-100 | Modification | Тековни трошоци defaulted to the in-progress month (read ~0) → default to last complete month + month stepper              | SM-100      | ☑      |
-| SM-103 | Feature      | Live Dashboard (KPIs, Задолжено vs наплатено, Топ должници, Редици за внимание) per handoff §1 — see `SM-103-dashboard.md` | §9.1        | ☐      |
+| SM-103 | Feature      | Live Dashboard (KPIs, Задолжено vs наплатено, Топ должници, Редици за внимание) per handoff §1 — see `SM-103-dashboard.md` | §9.1        | ☑      |
 
 **ИЗВЕШТАИ „missing clients" (not a bug):** margin-per-client is period-scoped. 2026-07 had 11 of 33
 active clients charged because W1 for July had not been re-run after a dev-data rebuild (29 earlier

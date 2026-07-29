@@ -152,3 +152,19 @@ glyphs (payer _names_ are unreadable). The payer _account_ is plain ASCII, so it
 key: the parser captures it (at/below the amount, outside the classify window — stored only, never
 in the lineHash), and the resolve screen learns `payer-account → client` from each matched payment.
 14/49 open payments got a correct suggestion immediately; coverage grows as more payments match.
+
+## Screen review — 2026-07-29 (developer request)
+
+Owner walked the ТРОШОЦИ / ТЕКОВНИ ТРОШОЦИ / ИЗВЕШТАИ / DASHBOARD screens. Duplicate-expense
+scare investigated and cleared (every expense traces 1:1 to a distinct bank line — no double-count).
+
+| ID     | Type         | Title                                                                                                                      | Ref         | Status |
+| ------ | ------------ | -------------------------------------------------------------------------------------------------------------------------- | ----------- | ------ |
+| SM-99  | Bug          | Трошоци rendered custom category keys (`CAT_…`) — resolve label from `Category.label`, static map fallback                 | §4.2, SM-99 | ☑      |
+| SM-100 | Modification | Тековни трошоци defaulted to the in-progress month (read ~0) → default to last complete month + month stepper              | SM-100      | ☑      |
+| SM-103 | Feature      | Live Dashboard (KPIs, Задолжено vs наплатено, Топ должници, Редици за внимание) per handoff §1 — see `SM-103-dashboard.md` | §9.1        | ☐      |
+
+**ИЗВЕШТАИ „missing clients" (not a bug):** margin-per-client is period-scoped. 2026-07 had 11 of 33
+active clients charged because W1 for July had not been re-run after a dev-data rebuild (29 earlier
+July charges were gone with no delete-audit). Re-ran W1 for 2026-07 → +22 DRAFT charges (11 skipped),
+all 33 active clients now present. The 2 churned clients (#39, #40) remain correctly excluded.

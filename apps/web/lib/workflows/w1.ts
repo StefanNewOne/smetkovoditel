@@ -223,7 +223,20 @@ export async function approveInvoice(
         let seq: number | null = null;
         let number: string;
         if (charge.period >= NEW_NUMBERING_FROM) {
-          number = intRef;
+          // New scheme (SM-87): legal number == internalRef (client+period). B12 allows multiple
+          // invoices per client/month, so the 2nd+ invoice would collide — suffix it "-2", "-3".
+          // The @unique on Charge.invoiceNumber makes a collision a P2002 that the outer loop retries
+          // (recomputing the count), so concurrent approvals converge without duplicating a number.
+          const already = await tx.charge.count({
+            where: {
+              clientId: charge.clientId,
+              period: charge.period,
+              kind: ChargeKind.INVOICE,
+              invoiceNumber: { not: null },
+              id: { not: chargeId },
+            },
+          });
+          number = already === 0 ? intRef : `${intRef}-${already + 1}`;
         } else {
           const agg = await tx.charge.aggregate({
             where: { period: charge.period, seqInMonth: { not: null } },

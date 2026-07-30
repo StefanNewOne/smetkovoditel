@@ -211,7 +211,7 @@ model Charge {
   kind            ChargeKind
   period          String // "2026-08"
   seqInMonth      Int?
-  invoiceNumber   String? // легален број; null за CASH_OBLIGATION
+  invoiceNumber   String? @unique // легален број; null за CASH_OBLIGATION (NULL-ови се дозволени повеќе)
   internalRef     String? // интерна референца "1-{clientNo}/{M}-{YYYY}" (SM-87), за сите фактури
   issueDate       DateTime
   dueDate         DateTime

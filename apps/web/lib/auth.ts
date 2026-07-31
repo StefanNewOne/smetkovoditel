@@ -9,14 +9,20 @@ export interface CurrentUser {
   role: string;
 }
 
+// A fixed valid hash (same cost factor) compared against when the email is unknown, so a missing
+// user costs the same as a wrong password — no timing side-channel for user enumeration.
+const DUMMY_HASH = bcrypt.hashSync("timing-equalizer-not-a-real-password", 10);
+
 /** Verify credentials against the User table and start a session. Returns null on failure. */
 export async function login(email: string, password: string): Promise<CurrentUser | null> {
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user) return null;
-  const ok = await bcrypt.compare(password, user.passwordHash);
-  if (!ok) return null;
+  const ok = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
+  if (!user || !ok) return null;
 
+  // Session fixation: drop any pre-existing (possibly attacker-planted) session, then issue a fresh
+  // sealed cookie at the auth boundary.
   const session = await getSession();
+  session.destroy();
   session.userId = user.id;
   session.name = user.name;
   session.role = user.role;

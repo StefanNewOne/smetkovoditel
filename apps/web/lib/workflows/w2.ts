@@ -19,6 +19,7 @@ import {
 import { writeAudit } from "@/lib/audit";
 import { parseNlbFromPdf } from "@/lib/pdf/nlb-parse";
 import { assertPeriodOpen } from "@/lib/period-guard";
+import { raiseAlert } from "@/lib/alerts";
 
 const log = pino({ level: process.env.LOG_LEVEL ?? "info" });
 
@@ -290,6 +291,12 @@ export async function ingestParsedStatement(
       { event: "statement.integrity.failed", statementNumber: parsed.statementNumber },
       msg,
     );
+    await raiseAlert({
+      type: "CONTINUITY_GAP",
+      title: `Извод ${parsed.statementNumber}: прекин на континуитет`,
+      detail: msg,
+      context: { statementNumber: parsed.statementNumber },
+    });
     return { status: "FAILED", statementNumber: parsed.statementNumber, messages: [msg] };
   }
 
@@ -309,6 +316,12 @@ export async function ingestParsedStatement(
         orderCount: parsed.orderCount ?? 0,
         status: "FAILED",
       },
+    });
+    await raiseAlert({
+      type: "INTEGRITY_FAILED",
+      title: `Извод ${parsed.statementNumber}: интегритет-гејт (B14) не помина`,
+      detail: parsed.integrity.messages.join("; "),
+      context: { statementNumber: parsed.statementNumber },
     });
     return {
       status: "FAILED",
@@ -564,6 +577,13 @@ export async function runMatching(userId: string): Promise<number> {
             },
             "USD/MKD курс надвор од ±6% — потребна рачна потврда",
           );
+          await raiseAlert({
+            type: "RATE_SANITY",
+            severity: "warn",
+            title: "USD/MKD курс надвор од ±6% при Meta спарување",
+            detail: `Импл. курс ${impliedRate.toFixed(2)} vs НБРМ ${rate.midMkd.toFixed(2)} — потребна рачна потврда`,
+            context: { referenceNumber: r.referenceNumber },
+          });
         }
       }
     }
@@ -629,6 +649,12 @@ export async function runMatching(userId: string): Promise<number> {
         { event: "match.error", referenceNumber: r.referenceNumber, err: String(e) },
         "Спарувањето на еден receipt не успеа — продолжувам со останатите",
       );
+      await raiseAlert({
+        type: "MATCH_ERROR",
+        title: "Meta спарување: грешка на еден receipt",
+        detail: `Референца ${r.referenceNumber}: ${String(e)}`,
+        context: { referenceNumber: r.referenceNumber },
+      });
     }
   }
   return matched;

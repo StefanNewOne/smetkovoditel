@@ -168,3 +168,35 @@ scare investigated and cleared (every expense traces 1:1 to a distinct bank line
 active clients charged because W1 for July had not been re-run after a dev-data rebuild (29 earlier
 July charges were gone with no delete-audit). Re-ran W1 for 2026-07 → +22 DRAFT charges (11 skipped),
 all 33 active clients now present. The 2 churned clients (#39, #40) remain correctly excluded.
+
+## Full-system audit — 2026-07-30 (developer request)
+
+Segment-by-segment correctness/security review (parsers, matching, charges/numbering, cash,
+contractors, reports, close, auth, schema). SM-110 batches the CRITICAL/HIGH/MED fixes.
+
+| ID     | Type | Title                                                                                               | Ref              | Status |
+| ------ | ---- | --------------------------------------------------------------------------------------------------- | ---------------- | ------ |
+| SM-110 | Bug  | Audit fixes: numbering uniqueness, period guards, blagajna race, double-ACTORS, matching race, auth | B1/B3/B9/B13/B16 | ☑      |
+
+**SM-110 fixes shipped:**
+
+- **C1** — `Charge.invoiceNumber` now `@unique` (migration `20260730120000`); the 2026-08+ scheme
+  suffixes the 2nd+ invoice per client/month (`…-2`, `…-3`), so no two invoices share a legal number.
+- **B9 guards** — added `assertPeriodOpen` to `meta.bookFacebkLine` / `manualMatchReceipt` /
+  `mapAdAccount`, `runPayroll`, and `loans.deleteLoanEntry`.
+- **B3** — `pg_advisory_xact_lock` serializes the blagajna never-negative check (W5 cash, W6).
+- **B16/T14** — `payoutHonorar` claims `CALCULATED→PAID` via a row-locking conditional update →
+  a second ACTORS expense set is structurally impossible under concurrency.
+- **B13** — `runMatching` claims the statement line atomically inside the tx; one bad receipt no
+  longer aborts the whole import batch.
+- **Auth** — login runs a dummy bcrypt on unknown email (no timing enumeration), regenerates the
+  session on login (no fixation), and refuses to boot in prod without `SESSION_SECRET`.
+- **Charges** — credit notes capped cumulatively vs the invoice; `approveAllDrafts` surfaces the
+  failed count instead of silently swallowing it.
+- **§2** — `collectCash` rejects a non-CASH client (prevents double-settlement).
+
+**Open (owner decision / follow-up):** `deleteCharge` of an issued invoice still leaves a fiscal-
+counter gap (owner-accepted, UI double-confirms — left unchanged). Deferred hardening: FK
+`onDelete: SetNull → RESTRICT` on provenance links, DB-level `AuditLog` append-only grant,
+issue-date timezone pin to `Europe/Skopje`, move cron secret from query → header. Integration tests
+in `audit-fixes.integration.test.ts` (run with Docker up).

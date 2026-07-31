@@ -1,14 +1,13 @@
 import "server-only";
+import { ChargeKind, ChargeStatus, ClientStatus, LineType, Prisma, prisma } from "@smetko/db";
 import {
-  ChargeKind,
-  ChargeStatus,
-  ClientStatus,
-  ExpenseCategory,
-  LineType,
-  Prisma,
-  prisma,
-} from "@smetko/db";
-import { addDays, invoiceNumber, periodStart, VAT_RATE } from "@smetko/shared";
+  addDays,
+  internalRef,
+  invoiceNumber,
+  NEW_NUMBERING_FROM,
+  periodStart,
+  VAT_RATE,
+} from "@smetko/shared";
 import { writeAudit } from "@/lib/audit";
 import { assertPeriodOpen } from "@/lib/period-guard";
 
@@ -29,11 +28,15 @@ interface DraftLine {
  * INVOICE → DRAFT (+18% ДДВ, number assigned at approval); CASH_OBLIGATION → OPEN (no number/VAT).
  * Idempotent: an existing charge for (client, period, kind) is skipped (safe to re-run).
  */
-export async function generateCharges(period: string, userId: string) {
+export async function generateCharges(
+  period: string,
+  userId: string,
+  channel?: "INVOICE" | "CASH",
+) {
   await assertPeriodOpen(prisma, period); // B9
   const start = periodStart(period);
   const clients = await prisma.client.findMany({
-    where: { status: ClientStatus.ACTIVE },
+    where: { status: ClientStatus.ACTIVE, ...(channel ? { paymentChannel: channel } : {}) },
     include: { packages: true, lineTemplates: { where: { active: true } } },
   });
 
@@ -44,8 +47,10 @@ export async function generateCharges(period: string, userId: string) {
     const kind =
       client.paymentChannel === "INVOICE" ? ChargeKind.INVOICE : ChargeKind.CASH_OBLIGATION;
 
-    const existing = await prisma.charge.findUnique({
-      where: { clientId_period_kind: { clientId: client.id, period, kind } },
+    // B12 relaxed: multiple invoices per month allowed. W1 still generates the recurring charge
+    // once — skip if one already exists for (client, period, kind). Extra invoices are added manually.
+    const existing = await prisma.charge.findFirst({
+      where: { clientId: client.id, period, kind },
     });
     if (existing) {
       skipped++;
@@ -60,6 +65,23 @@ export async function generateCharges(period: string, userId: string) {
       continue;
     }
 
+    // SM-88 — respect the client's start date and the package billing cycle.
+    const anchor = client.startDate ?? pkg.effectiveFrom;
+    const anchorMonth = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1));
+    if (start < anchorMonth) {
+      skipped++; // client has not started yet in this period
+      continue;
+    }
+    if (pkg.billingCycle === "QUARTERLY") {
+      const monthsSinceStart =
+        (start.getUTCFullYear() - anchorMonth.getUTCFullYear()) * 12 +
+        (start.getUTCMonth() - anchorMonth.getUTCMonth());
+      if (monthsSinceStart % 3 !== 0) {
+        skipped++; // quarterly client — bill only on the cycle boundary (every 3rd month)
+        continue;
+      }
+    }
+
     const isInvoice = kind === ChargeKind.INVOICE;
     const vatRate = isInvoice ? VAT_RATE : 0;
 
@@ -67,7 +89,9 @@ export async function generateCharges(period: string, userId: string) {
       const lines: DraftLine[] = [
         {
           type: LineType.SERVICE,
-          description: pkg.description ?? "Месечен пакет",
+          description:
+            pkg.description ??
+            (pkg.billingCycle === "QUARTERLY" ? "Тромесечен пакет" : "Месечен пакет"),
           amount: pkg.monthlyAmount,
           vatRate,
         },
@@ -75,8 +99,7 @@ export async function generateCharges(period: string, userId: string) {
 
       for (const tpl of client.lineTemplates) {
         if (tpl.type === LineType.META_ADS || tpl.type === LineType.ACTORS) {
-          const category =
-            tpl.type === LineType.META_ADS ? ExpenseCategory.ADS : ExpenseCategory.ACTORS;
+          const category = tpl.type === LineType.META_ADS ? "ADS" : "ACTORS";
           const expenses = await tx.expense.findMany({
             where: { clientId: client.id, isBillable: true, billedOnLineId: null, category },
           });
@@ -115,7 +138,7 @@ export async function generateCharges(period: string, userId: string) {
           period,
           issueDate,
           dueDate,
-          status: isInvoice ? ChargeStatus.DRAFT : ChargeStatus.OPEN,
+          status: ChargeStatus.DRAFT, // SM-89: both invoice and cash start as DRAFT (reviewable)
           subtotal,
           vatAmount,
           total,
@@ -145,23 +168,8 @@ export async function generateCharges(period: string, userId: string) {
         }
       }
 
-      // creditBalance auto-apply for cash obligations immediately (B18). For invoices this
-      // happens at approval. Modeled as an internal paidAmount adjustment (audited), not a
-      // cash Payment, since credit is not a money movement.
-      if (!isInvoice && client.creditBalance > 0 && total > 0) {
-        const applied = Math.min(client.creditBalance, total);
-        await tx.charge.update({
-          where: { id: charge.id },
-          data: {
-            paidAmount: applied,
-            status: applied >= total ? ChargeStatus.PAID : ChargeStatus.PARTIALLY_PAID,
-          },
-        });
-        await tx.client.update({
-          where: { id: client.id },
-          data: { creditBalance: { decrement: applied } },
-        });
-      }
+      // creditBalance auto-apply (B18) now happens at approval for both kinds (SM-89) — the charge
+      // is a DRAFT here, so nothing is applied yet.
 
       await writeAudit(tx, {
         entity: "Charge",
@@ -198,16 +206,48 @@ export async function approveInvoice(
         }
         await assertPeriodOpen(tx, charge.period); // B9
 
-        const agg = await tx.charge.aggregate({
-          where: { period: charge.period, seqInMonth: { not: null } },
-          _max: { seqInMonth: true },
-        });
-        const seq = (agg._max.seqInMonth ?? 0) + 1;
-        const number = invoiceNumber(seq, charge.period);
+        const client = await tx.client.findUnique({ where: { id: charge.clientId } });
+        if (!client) throw new Error("Клиентот не постои.");
+
+        // Fixed client number (SM-85) — assign the next one if this client has none yet.
+        let clientNo = client.number;
+        if (clientNo == null) {
+          const maxNo = await tx.client.aggregate({ _max: { number: true } });
+          clientNo = (maxNo._max.number ?? 0) + 1;
+          await tx.client.update({ where: { id: client.id }, data: { number: clientNo } });
+        }
+        const intRef = internalRef(clientNo, charge.period);
+
+        // Legal number (SM-87): the running fiscal counter until 2026-08, then the internal scheme
+        // `1-{clientNo}/{M}-{YYYY}`. Both are always stored; from August the legal number == intRef.
+        let seq: number | null = null;
+        let number: string;
+        if (charge.period >= NEW_NUMBERING_FROM) {
+          // New scheme (SM-87): legal number == internalRef (client+period). B12 allows multiple
+          // invoices per client/month, so the 2nd+ invoice would collide — suffix it "-2", "-3".
+          // The @unique on Charge.invoiceNumber makes a collision a P2002 that the outer loop retries
+          // (recomputing the count), so concurrent approvals converge without duplicating a number.
+          const already = await tx.charge.count({
+            where: {
+              clientId: charge.clientId,
+              period: charge.period,
+              kind: ChargeKind.INVOICE,
+              invoiceNumber: { not: null },
+              id: { not: chargeId },
+            },
+          });
+          number = already === 0 ? intRef : `${intRef}-${already + 1}`;
+        } else {
+          const agg = await tx.charge.aggregate({
+            where: { period: charge.period, seqInMonth: { not: null } },
+            _max: { seqInMonth: true },
+          });
+          seq = (agg._max.seqInMonth ?? 0) + 1;
+          number = invoiceNumber(seq, charge.period);
+        }
 
         let paidAmount = charge.paidAmount;
-        const client = await tx.client.findUnique({ where: { id: charge.clientId } });
-        if (client && client.creditBalance > 0 && charge.total > paidAmount) {
+        if (client.creditBalance > 0 && charge.total > paidAmount) {
           const applied = Math.min(client.creditBalance, charge.total - paidAmount);
           paidAmount += applied;
           await tx.client.update({
@@ -224,13 +264,20 @@ export async function approveInvoice(
 
         await tx.charge.update({
           where: { id: chargeId },
-          data: { seqInMonth: seq, invoiceNumber: number, status, paidAmount },
+          data: {
+            seqInMonth: seq,
+            invoiceNumber: number,
+            internalRef: intRef,
+            issueDate: new Date(), // датум на издавање = денот на одобрување (DRAFT→OPEN)
+            status,
+            paidAmount,
+          },
         });
         await writeAudit(tx, {
           entity: "Charge",
           entityId: chargeId,
           action: "approve",
-          diff: { invoiceNumber: number, seqInMonth: seq },
+          diff: { invoiceNumber: number, internalRef: intRef, seqInMonth: seq },
           userId,
         });
         return { invoiceNumber: number };
@@ -241,4 +288,98 @@ export async function approveInvoice(
     }
   }
   throw new Error("Нумерацијата не успеа по повеќе обиди.");
+}
+
+/** SM-89 — approve a CASH_OBLIGATION draft (DRAFT → OPEN). No number, no VAT; applies creditBalance
+ *  (B18) and stamps the issue date at approval. Period-guarded (B9), audited. */
+export async function approveCashObligation(chargeId: string, userId: string) {
+  await prisma.$transaction(async (tx) => {
+    const charge = await tx.charge.findUnique({ where: { id: chargeId } });
+    if (!charge) throw new Error("Задолжувањето не постои.");
+    if (charge.kind !== ChargeKind.CASH_OBLIGATION)
+      throw new Error("Само кеш-обврска се одобрува вака.");
+    if (charge.status !== ChargeStatus.DRAFT) return;
+    await assertPeriodOpen(tx, charge.period); // B9
+
+    let paidAmount = charge.paidAmount;
+    const client = await tx.client.findUnique({ where: { id: charge.clientId } });
+    if (client && client.creditBalance > 0 && charge.total > paidAmount) {
+      const applied = Math.min(client.creditBalance, charge.total - paidAmount);
+      paidAmount += applied;
+      await tx.client.update({
+        where: { id: client.id },
+        data: { creditBalance: { decrement: applied } },
+      });
+    }
+    const status =
+      paidAmount >= charge.total
+        ? ChargeStatus.PAID
+        : paidAmount > 0
+          ? ChargeStatus.PARTIALLY_PAID
+          : ChargeStatus.OPEN;
+
+    await tx.charge.update({
+      where: { id: chargeId },
+      data: { status, paidAmount, issueDate: new Date() },
+    });
+    await writeAudit(tx, {
+      entity: "Charge",
+      entityId: chargeId,
+      action: "approve.cash",
+      diff: { status, paidAmount },
+      userId,
+    });
+  });
+}
+
+/** SM-89 — delete a charge (DRAFT, an OPEN cash obligation, or an invoice approved by mistake).
+ *  Frees any bank statement lines its payments occupied (re-matchable), unbinds billed expenses and
+ *  credit-note links, then removes the charge. Period-guarded (B9 — closed period rejected), audited.
+ *  Note: deleting an issued invoice leaves a gap in the fiscal counter (owner-accepted; the UI
+ *  double-confirms). Cash ledger entries from cash receipts are left intact (the cash was received). */
+export async function deleteCharge(chargeId: string, userId: string) {
+  await prisma.$transaction(async (tx) => {
+    const charge = await tx.charge.findUnique({ where: { id: chargeId } });
+    if (!charge) throw new Error("Задолжувањето не постои.");
+    await assertPeriodOpen(tx, charge.period); // B9
+
+    const payments = await tx.payment.findMany({
+      where: { chargeId },
+      select: { id: true, statementLineId: true },
+    });
+    const slIds = payments.map((p) => p.statementLineId).filter((x): x is string => !!x);
+    if (slIds.length)
+      await tx.statementLine.updateMany({
+        where: { id: { in: slIds } },
+        data: { processed: false, linkedType: null, linkedId: null },
+      });
+
+    const lines = await tx.chargeLine.findMany({ where: { chargeId }, select: { id: true } });
+    const lineIds = lines.map((l) => l.id);
+    if (lineIds.length)
+      await tx.expense.updateMany({
+        where: { billedOnLineId: { in: lineIds } },
+        data: { billedOnLineId: null },
+      });
+    await tx.charge.updateMany({
+      where: { relatedChargeId: chargeId },
+      data: { relatedChargeId: null },
+    });
+
+    await tx.payment.deleteMany({ where: { chargeId } });
+    await tx.chargeLine.deleteMany({ where: { chargeId } });
+    await writeAudit(tx, {
+      entity: "Charge",
+      entityId: chargeId,
+      action: "delete",
+      diff: {
+        kind: charge.kind,
+        status: charge.status,
+        invoiceNumber: charge.invoiceNumber,
+        total: charge.total,
+      },
+      userId,
+    });
+    await tx.charge.delete({ where: { id: chargeId } });
+  });
 }

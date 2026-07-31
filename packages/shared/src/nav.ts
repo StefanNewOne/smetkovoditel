@@ -11,8 +11,13 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "clients", label: "Клиенти", href: "/clients", icon: "Users" },
   { key: "charges", label: "Задолжувања", href: "/charges", icon: "FileText" },
   { key: "import", label: "Import центар", href: "/import", icon: "Download" },
+  { key: "resolve", label: "Решавање", href: "/resolve", icon: "ListChecks" },
+  { key: "meta", label: "META Реклами", href: "/meta", icon: "Megaphone" },
   { key: "cash", label: "Благајна", href: "/cash", icon: "Wallet" },
+  { key: "recurring", label: "Тековни трошоци", href: "/recurring", icon: "CalendarClock" },
+  { key: "expenses", label: "Трошоци", href: "/expenses", icon: "Receipt" },
   { key: "contractors", label: "Хонорарци", href: "/contractors", icon: "Clapperboard" },
   { key: "reports", label: "Извештаи", href: "/reports", icon: "BarChart3" },
+  { key: "alerts", label: "Аларми", href: "/alerts", icon: "Bell" },
   { key: "settings", label: "Подесувања", href: "/settings", icon: "Settings" },
 ];

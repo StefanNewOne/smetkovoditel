@@ -1,15 +1,30 @@
 import "server-only";
 import {
+  ChargeKind,
   ChargeStatus,
   Direction,
-  ExpenseCategory,
   type ImportSource,
   MatchStatus,
   PayChannel,
+  Prisma,
   prisma,
 } from "@smetko/db";
-import { normalizeInvoiceRef, parseMetaReceipt, parseNlbStatement } from "@smetko/shared";
+import pino from "pino";
+import {
+  type NlbStatement,
+  normalizeInvoiceRef,
+  parseMetaReceipt,
+  parseNlbStatement,
+} from "@smetko/shared";
 import { writeAudit } from "@/lib/audit";
+import { parseNlbFromPdf } from "@/lib/pdf/nlb-parse";
+import { assertPeriodOpen } from "@/lib/period-guard";
+import { raiseAlert } from "@/lib/alerts";
+
+const log = pino({ level: process.env.LOG_LEVEL ?? "info" });
+
+/** USD/MKD rate sanity band for Meta matching (§4.4). Booking always uses the statement MKD. */
+const RATE_SANITY_BAND = 0.06;
 
 const OPEN_STATUSES: ChargeStatus[] = [
   ChargeStatus.OPEN,
@@ -39,13 +54,181 @@ export type StatementIngest =
  * W2 — ingest an NLB statement (Master Plan §4.2): dedupe (B13) → integrity gate (B14) →
  * persist lines + classify → auto-book CLIENT_PAYMENT to charges; META_ADS lines await matching.
  */
+/** Ingest from a PDF buffer using the column-aware positional parser (real statements). */
+/**
+ * FIFO settlement (go-live Part 2B) — an incoming payment with no matched повикување is applied to
+ * the payer's OLDEST open invoice, the payer identified by the giro account (ClientBankAccount), so
+ * payments don't pile up in Решавање. Overpayment → creditBalance (B18); if the client has no open
+ * invoice the whole amount goes to credit. Closed-period invoices are never touched (B9). Runs
+ * inside the caller's transaction; returns true if it settled the line.
+ */
+async function settleOldestByAccount(
+  tx: Prisma.TransactionClient,
+  lineId: string,
+  amount: number,
+  date: Date,
+  reference: string | null,
+  userId: string,
+): Promise<boolean> {
+  const line = await tx.statementLine.findUnique({ where: { id: lineId } });
+  if (!line || line.processed || !line.counterpartyAccount) return false;
+  const acc = await tx.clientBankAccount.findUnique({
+    where: { account: line.counterpartyAccount },
+  });
+  if (!acc) return false;
+
+  const charge = await tx.charge.findFirst({
+    where: {
+      clientId: acc.clientId,
+      kind: ChargeKind.INVOICE,
+      invoiceNumber: { not: null },
+      status: { in: [ChargeStatus.OPEN, ChargeStatus.PARTIALLY_PAID, ChargeStatus.OVERDUE] },
+    },
+    orderBy: [{ period: "asc" }, { seqInMonth: "asc" }], // oldest first
+  });
+
+  if (!charge) {
+    // known payer, no open invoice → whole amount to credit (B18)
+    await tx.client.update({
+      where: { id: acc.clientId },
+      data: { creditBalance: { increment: amount } },
+    });
+    await tx.statementLine.update({
+      where: { id: lineId },
+      data: { processed: true, linkedType: "Credit" },
+    });
+    await writeAudit(tx, {
+      entity: "StatementLine",
+      entityId: lineId,
+      action: "match.fifo.credit",
+      diff: { clientId: acc.clientId, amount },
+      userId,
+    });
+    return true;
+  }
+
+  const period = await tx.period.findUnique({ where: { id: charge.period } });
+  if (period?.status === "CLOSED") return false; // never mutate posted history (B9)
+
+  const remaining = charge.total - charge.paidAmount;
+  const applied = Math.min(amount, Math.max(remaining, 0));
+  const overpay = amount - applied;
+  await tx.payment.create({
+    data: {
+      clientId: acc.clientId,
+      chargeId: charge.id,
+      channel: PayChannel.BANK,
+      amount: applied,
+      date,
+      reference,
+      matchStatus: MatchStatus.AUTO_MATCHED,
+      statementLineId: lineId,
+    },
+  });
+  const newPaid = charge.paidAmount + applied;
+  await tx.charge.update({
+    where: { id: charge.id },
+    data: {
+      paidAmount: newPaid,
+      status: newPaid >= charge.total ? ChargeStatus.PAID : ChargeStatus.PARTIALLY_PAID,
+    },
+  });
+  if (overpay > 0)
+    await tx.client.update({
+      where: { id: acc.clientId },
+      data: { creditBalance: { increment: overpay } },
+    });
+  await tx.statementLine.update({
+    where: { id: lineId },
+    data: { processed: true, linkedType: "Charge", linkedId: charge.id },
+  });
+  await writeAudit(tx, {
+    entity: "StatementLine",
+    entityId: lineId,
+    action: "match.fifo",
+    diff: { clientId: acc.clientId, chargeId: charge.id, applied },
+    userId,
+  });
+  return true;
+}
+
+/** Run FIFO settlement over all currently-unmatched incoming lines (go-live one-off + safety net). */
+export async function runFifoOnUnmatched(userId: string): Promise<number> {
+  const lines = await prisma.statementLine.findMany({
+    where: { processed: false, direction: "IN" },
+    orderBy: { date: "asc" },
+    select: { id: true, amount: true, date: true, reference: true },
+  });
+  let settled = 0;
+  for (const l of lines) {
+    const ok = await prisma.$transaction((tx) =>
+      settleOldestByAccount(tx, l.id, l.amount, l.date, l.reference, userId),
+    );
+    if (ok) settled++;
+  }
+  return settled;
+}
+
+/**
+ * SM-99 phase B — link a payer's giro account to a client from a Решавање row, then run FIFO so the
+ * payment(s) from that account settle the client's oldest open invoice (generalizes the manual
+ * account→client fix into the UI). Future payments from the same account auto-settle on import.
+ */
+export async function linkAccountAndSettle(
+  lineId: string,
+  clientId: string,
+  userId: string,
+): Promise<{ settled: number }> {
+  const line = await prisma.statementLine.findUnique({ where: { id: lineId } });
+  const account = line?.counterpartyAccount;
+  if (!account) throw new Error("Линијата нема сметка на плаќач за поврзување.");
+  const client = await prisma.client.findUnique({ where: { id: clientId } });
+  if (!client) throw new Error("Клиентот не постои.");
+
+  await prisma.$transaction(async (tx) => {
+    await tx.clientBankAccount.upsert({
+      where: { account },
+      update: { clientId },
+      create: { clientId, account, label: "Плаќачка сметка" },
+    });
+    await writeAudit(tx, {
+      entity: "ClientBankAccount",
+      entityId: account,
+      action: "account.linked",
+      diff: { clientId, lineId },
+      userId,
+    });
+  });
+
+  const settled = await runFifoOnUnmatched(userId);
+  return { settled };
+}
+
+export async function ingestStatementPdf(
+  buffer: Buffer,
+  fileRef: string,
+  source: ImportSource,
+  userId: string,
+): Promise<StatementIngest> {
+  return ingestParsedStatement(await parseNlbFromPdf(buffer), fileRef, source, userId);
+}
+
+/** Ingest from extracted text (golden/redacted fixtures + tests; direction from classification). */
 export async function ingestStatement(
   text: string,
   fileRef: string,
   source: ImportSource,
   userId: string,
 ): Promise<StatementIngest> {
-  const parsed = parseNlbStatement(text);
+  return ingestParsedStatement(parseNlbStatement(text), fileRef, source, userId);
+}
+
+export async function ingestParsedStatement(
+  parsed: NlbStatement,
+  fileRef: string,
+  source: ImportSource,
+  userId: string,
+): Promise<StatementIngest> {
   if (parsed.statementNumber == null) {
     return {
       status: "FAILED",
@@ -77,6 +260,46 @@ export async function ingestStatement(
 
   const statementDate = parseMkDate(parsed.statementDate);
 
+  // B14 — continuity gate: the immediate predecessor statement's closing balance must equal this
+  // statement's opening balance. Only checked when the exact predecessor (N-1) exists, so a
+  // legitimately missing intermediate statement does not cause a false failure.
+  const predecessor = await prisma.bankStatementImport.findFirst({
+    where: {
+      bankAccountId: bankAccount.id,
+      statementNumber: parsed.statementNumber - 1,
+      status: "PARSED",
+    },
+  });
+  if (predecessor && predecessor.closingBalance !== parsed.prevBalance) {
+    await prisma.bankStatementImport.create({
+      data: {
+        bankAccountId: bankAccount.id,
+        statementNumber: parsed.statementNumber,
+        statementDate,
+        source,
+        fileRef,
+        openingBalance: parsed.prevBalance,
+        totalDebit: parsed.totalDebit,
+        totalCredit: parsed.totalCredit,
+        closingBalance: parsed.newBalance,
+        orderCount: parsed.orderCount ?? 0,
+        status: "FAILED",
+      },
+    });
+    const msg = `Континуитет: отворено ${parsed.prevBalance} ≠ претходно затворено ${predecessor.closingBalance} (извод ${predecessor.statementNumber})`;
+    log.error(
+      { event: "statement.integrity.failed", statementNumber: parsed.statementNumber },
+      msg,
+    );
+    await raiseAlert({
+      type: "CONTINUITY_GAP",
+      title: `Извод ${parsed.statementNumber}: прекин на континуитет`,
+      detail: msg,
+      context: { statementNumber: parsed.statementNumber },
+    });
+    return { status: "FAILED", statementNumber: parsed.statementNumber, messages: [msg] };
+  }
+
   // B14 — integrity gate: on failure record the import as FAILED and post nothing.
   if (!parsed.integrity.ok) {
     await prisma.bankStatementImport.create({
@@ -93,6 +316,12 @@ export async function ingestStatement(
         orderCount: parsed.orderCount ?? 0,
         status: "FAILED",
       },
+    });
+    await raiseAlert({
+      type: "INTEGRITY_FAILED",
+      title: `Извод ${parsed.statementNumber}: интегритет-гејт (B14) не помина`,
+      detail: parsed.integrity.messages.join("; "),
+      context: { statementNumber: parsed.statementNumber },
     });
     return {
       status: "FAILED",
@@ -146,7 +375,17 @@ export async function ingestStatement(
       if (line.classifiedAs === "CLIENT_PAYMENT" && line.reference) {
         const norm = normalizeInvoiceRef(line.reference);
         const match = openCharges.find((c) => normalizeInvoiceRef(c.invoiceNumber!) === norm);
-        if (match) {
+        const chargePeriod = match
+          ? await tx.period.findUnique({ where: { id: match.period } })
+          : null;
+        if (match && chargePeriod?.status === "CLOSED") {
+          // Late payment on a closed-period invoice — never mutate posted history (B9). Leave the
+          // line unprocessed for manual handling (credit note / manual match) in the open period.
+          log.warn(
+            { event: "match.alarm", statementNumber: parsed.statementNumber, period: match.period },
+            "уплата за фактура во затворен период — оставена нерешена",
+          );
+        } else if (match) {
           const remaining = match.total - match.paidAmount;
           const applied = Math.min(line.amount, Math.max(remaining, 0));
           const overpay = line.amount - applied;
@@ -183,18 +422,26 @@ export async function ingestStatement(
           match.paidAmount = newPaid; // avoid re-matching within this statement
           clientMatched++;
         }
-      } else if (line.classifiedAs === "CARD_TX" && line.merchant) {
-        // SM-51: auto-categorize card purchases via VendorRule (e.g. PETROL → FUEL).
-        const merchant = line.merchant.toUpperCase();
-        const rule = vendorRules.find((r) => merchant.includes(r.pattern.toUpperCase()));
+      } else if (
+        line.direction === Direction.OUT &&
+        (line.classifiedAs === "CARD_TX" || line.classifiedAs === "OTHER")
+      ) {
+        // SM-51/SM-100: auto-categorize via VendorRule — by card merchant (substring) or, for a
+        // transfer with no merchant, by the exact recipient account (learned account→vendor memory).
+        const merchant = (line.merchant ?? "").toUpperCase();
+        const rule = vendorRules.find(
+          (r) =>
+            (merchant.length > 0 && merchant.includes(r.pattern.toUpperCase())) ||
+            (!!line.counterpartyAccount && r.pattern === line.counterpartyAccount),
+        );
         if (rule) {
           const exp = await tx.expense.create({
             data: {
               category: rule.category,
-              vendor: rule.vendor ?? line.merchant,
+              vendor: rule.vendor ?? line.merchant ?? line.counterpartyAccount,
               amount: line.amount,
               date: statementDate,
-              paymentChannel: PayChannel.CARD,
+              paymentChannel: line.classifiedAs === "CARD_TX" ? PayChannel.CARD : PayChannel.BANK,
               isBillable: false,
               statementLineId: sl.id,
             },
@@ -205,6 +452,27 @@ export async function ingestStatement(
             data: { processed: true, linkedType: "Expense", linkedId: exp.id },
           });
         }
+      }
+
+      // FIFO (Part 2B): an incoming line still unmatched → settle the payer's oldest open invoice
+      // by giro account, so it never piles up in Решавање.
+      if (line.direction === Direction.IN) {
+        const cur = await tx.statementLine.findUnique({
+          where: { id: sl.id },
+          select: { processed: true },
+        });
+        if (
+          !cur?.processed &&
+          (await settleOldestByAccount(
+            tx,
+            sl.id,
+            line.amount,
+            statementDate,
+            line.reference,
+            userId,
+          ))
+        )
+          clientMatched++;
       }
     }
 
@@ -288,48 +556,316 @@ export async function runMatching(userId: string): Promise<number> {
     });
     if (!line) continue;
 
-    await prisma.$transaction(async (tx) => {
-      const adAccount = r.metaAccountId
-        ? await tx.adAccount.findUnique({ where: { metaAccountId: r.metaAccountId } })
-        : null;
-      const clientId = adAccount?.clientId ?? null;
-
-      const expense = await tx.expense.create({
-        data: {
-          category: ExpenseCategory.ADS,
-          vendor: "Meta",
-          amount: line.amount, // MKD from the statement, 1:1 (D3)
-          date: line.date,
-          paymentChannel: PayChannel.CARD,
-          clientId,
-          isBillable: clientId != null, // B2: billable ADS needs a client
-          attachmentUrl: r.attachmentUrl, // the Meta PDF — legal document
-          statementLineId: line.id,
-          adSpendReceiptId: r.id,
-        },
+    // §4.4 rate sanity: the booked MKD (always the statement amount, D3) vs USD × НБРМ mid.
+    // Outside ±6% → alarm for manual confirm; the booked amount itself is never affected.
+    let rateSanityOk = true;
+    if (r.amountUsd > 0) {
+      const rate = await prisma.exchangeRate.findFirst({
+        where: { code: "USD", date: { lte: line.date } },
+        orderBy: { date: "desc" },
       });
-      await tx.adSpendReceipt.update({
-        where: { id: r.id },
-        data: { matchStatus: MatchStatus.AUTO_MATCHED, statementLineId: line.id },
+      if (rate && rate.midMkd > 0) {
+        const impliedRate = line.amount / r.amountUsd; // MKD per USD (the ×100 units cancel)
+        rateSanityOk = Math.abs(impliedRate - rate.midMkd) / rate.midMkd <= RATE_SANITY_BAND;
+        if (!rateSanityOk) {
+          log.warn(
+            {
+              event: "match.alarm",
+              referenceNumber: r.referenceNumber,
+              impliedRate,
+              mid: rate.midMkd,
+            },
+            "USD/MKD курс надвор од ±6% — потребна рачна потврда",
+          );
+          await raiseAlert({
+            type: "RATE_SANITY",
+            severity: "warn",
+            title: "USD/MKD курс надвор од ±6% при Meta спарување",
+            detail: `Импл. курс ${impliedRate.toFixed(2)} vs НБРМ ${rate.midMkd.toFixed(2)} — потребна рачна потврда`,
+            context: { referenceNumber: r.referenceNumber },
+          });
+        }
+      }
+    }
+
+    // Concurrency: runMatching runs from three entry points (statement ingest, receipt ingest,
+    // manual Rematch). Claim the line and the receipt ATOMICALLY inside the tx — a stale read from
+    // outside must never let two runs both book the same line. On a lost race we skip, not crash;
+    // any unexpected error is logged and the batch continues (one bad receipt ≠ failed import).
+    try {
+      const booked = await prisma.$transaction(async (tx) => {
+        const claim = await tx.statementLine.updateMany({
+          where: { id: line.id, processed: false },
+          data: { processed: true, direction: Direction.OUT },
+        });
+        if (claim.count === 0) return false; // another run already claimed this line
+        const fresh = await tx.adSpendReceipt.findUnique({ where: { id: r.id } });
+        if (!fresh || fresh.matchStatus !== MatchStatus.UNMATCHED) return false; // receipt taken
+
+        const adAccount = r.metaAccountId
+          ? await tx.adAccount.findUnique({ where: { metaAccountId: r.metaAccountId } })
+          : null;
+        const clientId = adAccount?.clientId ?? null;
+
+        const expense = await tx.expense.create({
+          data: {
+            category: "ADS",
+            vendor: "Meta",
+            amount: line.amount, // MKD from the statement, 1:1 (D3)
+            date: line.date,
+            paymentChannel: PayChannel.CARD,
+            clientId,
+            isBillable: clientId != null, // B2: billable ADS needs a client
+            attachmentUrl: r.attachmentUrl, // the Meta PDF — legal document
+            statementLineId: line.id,
+            adSpendReceiptId: r.id,
+          },
+        });
+        await tx.adSpendReceipt.update({
+          where: { id: r.id },
+          data: { matchStatus: MatchStatus.AUTO_MATCHED, statementLineId: line.id },
+        });
+        await tx.statementLine.update({
+          where: { id: line.id },
+          data: { linkedType: "Expense", linkedId: expense.id },
+        });
+        await writeAudit(tx, {
+          entity: "AdSpendReceipt",
+          entityId: r.id,
+          action: "match.auto",
+          diff: {
+            referenceNumber: r.referenceNumber,
+            amountMkd: line.amount,
+            clientId,
+            rateSanityOk,
+          },
+          userId,
+        });
+        return true;
+      });
+      if (booked) matched++;
+    } catch (e) {
+      log.warn(
+        { event: "match.error", referenceNumber: r.referenceNumber, err: String(e) },
+        "Спарувањето на еден receipt не успеа — продолжувам со останатите",
+      );
+      await raiseAlert({
+        type: "MATCH_ERROR",
+        title: "Meta спарување: грешка на еден receipt",
+        detail: `Референца ${r.referenceNumber}: ${String(e)}`,
+        context: { referenceNumber: r.referenceNumber },
+      });
+    }
+  }
+  return matched;
+}
+
+/**
+ * Manual resolution of an unprocessed CLIENT_PAYMENT statement line against a chosen open charge
+ * (§9.4 import queue). Applies the bank payment, updates the charge, routes overpayment to credit
+ * (B18). Period-guarded (B9) and idempotent (a processed line is rejected).
+ */
+export async function manualMatchStatementLine(lineId: string, chargeId: string, userId: string) {
+  await prisma.$transaction(async (tx) => {
+    const line = await tx.statementLine.findUnique({ where: { id: lineId } });
+    if (!line || line.processed) throw new Error("Линијата не постои или е веќе решена.");
+    const charge = await tx.charge.findUnique({ where: { id: chargeId } });
+    if (!charge) throw new Error("Задолжувањето не постои.");
+    await assertPeriodOpen(tx, charge.period); // B9
+
+    const remaining = charge.total - charge.paidAmount;
+    const applied = Math.min(line.amount, Math.max(remaining, 0));
+    const overpay = line.amount - applied;
+    await tx.payment.create({
+      data: {
+        clientId: charge.clientId,
+        chargeId: charge.id,
+        channel: PayChannel.BANK,
+        amount: applied,
+        date: line.date,
+        reference: line.reference,
+        matchStatus: MatchStatus.MANUAL_MATCHED,
+        statementLineId: line.id,
+      },
+    });
+    const newPaid = charge.paidAmount + applied;
+    await tx.charge.update({
+      where: { id: charge.id },
+      data: {
+        paidAmount: newPaid,
+        status: newPaid >= charge.total ? ChargeStatus.PAID : ChargeStatus.PARTIALLY_PAID,
+      },
+    });
+    if (overpay > 0) {
+      await tx.client.update({
+        where: { id: charge.clientId },
+        data: { creditBalance: { increment: overpay } },
+      });
+    }
+    await tx.statementLine.update({
+      where: { id: line.id },
+      data: { processed: true, linkedType: "Charge", linkedId: charge.id },
+    });
+    await writeAudit(tx, {
+      entity: "StatementLine",
+      entityId: line.id,
+      action: "match.manual",
+      diff: { chargeId, applied },
+      userId,
+    });
+  });
+}
+
+/** Mark a noise statement line (BANK_FEE / OTHER / uncategorized CARD_TX) resolved without booking. */
+export async function ignoreStatementLine(lineId: string, userId: string) {
+  await prisma.$transaction(async (tx) => {
+    const line = await tx.statementLine.findUnique({ where: { id: lineId } });
+    if (!line || line.processed) return;
+    await tx.statementLine.update({
+      where: { id: line.id },
+      data: { processed: true, linkedType: "Ignored" },
+    });
+    await writeAudit(tx, {
+      entity: "StatementLine",
+      entityId: line.id,
+      action: "line.ignored",
+      diff: { amount: line.amount, classifiedAs: line.classifiedAs },
+      userId,
+    });
+  });
+}
+
+export interface CategorizeResult {
+  expenseId: string;
+  learnedRule: boolean;
+  siblingMatches: number; // other pending OUT lines the learned rule would also catch (info only)
+}
+
+/** period id "YYYY-MM" from a statement-line date (booking period of the expense). */
+const periodOfDate = (d: Date) =>
+  `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+
+/**
+ * Resolve an outgoing statement line as an operating Expense (§4.2). Card/bank expense — the NLB
+ * statement IS the document, so no photo is required (B6). Atomic + audited, period-guarded (B9),
+ * idempotent (an already-processed line is rejected). With `rememberVendor`, learns a VendorRule so
+ * future imports auto-categorize the same merchant (the existing §4.2 CARD_TX pipeline).
+ */
+export async function categorizeStatementLine(
+  lineId: string,
+  category: string, // Category.key (SM-99)
+  opts: { rememberVendor?: boolean },
+  userId: string,
+): Promise<CategorizeResult> {
+  return prisma.$transaction(async (tx) => {
+    const line = await tx.statementLine.findUnique({ where: { id: lineId } });
+    if (!line || line.processed) throw new Error("Линијата не постои или е веќе решена.");
+    if (line.direction !== Direction.OUT) throw new Error("Само излезни линии се трошоци.");
+    await assertPeriodOpen(tx, periodOfDate(line.date)); // B9
+
+    const vendor = line.counterpartyName ?? line.description ?? null;
+    const exp = await tx.expense.create({
+      data: {
+        category,
+        vendor,
+        amount: line.amount, // денари, from the statement (B10)
+        date: line.date,
+        paymentChannel: line.classifiedAs === "CARD_TX" ? PayChannel.CARD : PayChannel.BANK,
+        isBillable: false, // agency operating cost; the card/bank statement is the record (B6)
+        statementLineId: line.id,
+      },
+    });
+    await tx.statementLine.update({
+      where: { id: line.id },
+      data: { processed: true, linkedType: "Expense", linkedId: exp.id },
+    });
+
+    let learnedRule = false;
+    let siblingMatches = 0;
+    const pattern = (vendor ?? "").trim().toUpperCase();
+    if (opts.rememberVendor && pattern.length >= 3) {
+      // VendorRule matches by `merchant.includes(pattern)` on import (§4.2). Dedupe on (pattern, category).
+      const existing = await tx.vendorRule.findFirst({ where: { pattern, category } });
+      if (!existing) {
+        await tx.vendorRule.create({ data: { pattern, category, vendor } });
+        learnedRule = true;
+      }
+      const pending = await tx.statementLine.findMany({
+        where: { processed: false, direction: Direction.OUT, id: { not: line.id } },
+        select: { counterpartyName: true, description: true },
+      });
+      siblingMatches = pending.filter((p) =>
+        `${p.counterpartyName ?? ""} ${p.description ?? ""}`.toUpperCase().includes(pattern),
+      ).length;
+    }
+
+    log.info(
+      { event: "line.classified", statementLineId: line.id, category, learnedRule },
+      "извод-линија категоризирана како трошок",
+    );
+    await writeAudit(tx, {
+      entity: "StatementLine",
+      entityId: line.id,
+      action: "line.categorized",
+      diff: { category, amount: line.amount, expenseId: exp.id, learnedRule },
+      userId,
+    });
+    return { expenseId: exp.id, learnedRule, siblingMatches };
+  });
+}
+
+/**
+ * SM-99 phase C — categorize many outgoing lines (a merchant/account group) as one category in a
+ * single transaction, optionally learning ONE VendorRule from the group's pattern (merchant token
+ * for card groups, account number for transfer groups) so future imports auto-categorize them.
+ * Skips already-processed / non-OUT lines; period-guarded (B9) per line.
+ */
+export async function bulkCategorizeLines(
+  lineIds: string[],
+  category: string,
+  learnPattern: string | null,
+  userId: string,
+): Promise<{ categorized: number; learnedRule: boolean }> {
+  return prisma.$transaction(async (tx) => {
+    let categorized = 0;
+    for (const id of lineIds) {
+      const line = await tx.statementLine.findUnique({ where: { id } });
+      if (!line || line.processed || line.direction !== Direction.OUT) continue;
+      await assertPeriodOpen(tx, periodOfDate(line.date)); // B9
+      const exp = await tx.expense.create({
+        data: {
+          category,
+          vendor: line.counterpartyName ?? line.description ?? line.counterpartyAccount,
+          amount: line.amount,
+          date: line.date,
+          paymentChannel: line.classifiedAs === "CARD_TX" ? PayChannel.CARD : PayChannel.BANK,
+          isBillable: false,
+          statementLineId: line.id,
+        },
       });
       await tx.statementLine.update({
         where: { id: line.id },
-        data: {
-          processed: true,
-          direction: Direction.OUT,
-          linkedType: "Expense",
-          linkedId: expense.id,
-        },
+        data: { processed: true, linkedType: "Expense", linkedId: exp.id },
       });
       await writeAudit(tx, {
-        entity: "AdSpendReceipt",
-        entityId: r.id,
-        action: "match.auto",
-        diff: { referenceNumber: r.referenceNumber, amountMkd: line.amount, clientId },
+        entity: "StatementLine",
+        entityId: line.id,
+        action: "line.categorized",
+        diff: { category, amount: line.amount, expenseId: exp.id, bulk: true },
         userId,
       });
-    });
-    matched++;
-  }
-  return matched;
+      categorized++;
+    }
+
+    let learnedRule = false;
+    const pattern = (learnPattern ?? "").trim().toUpperCase();
+    if (pattern.length >= 3) {
+      const existing = await tx.vendorRule.findFirst({ where: { pattern, category } });
+      if (!existing) {
+        await tx.vendorRule.create({ data: { pattern, category, vendor: learnPattern } });
+        learnedRule = true;
+      }
+    }
+    return { categorized, learnedRule };
+  });
 }

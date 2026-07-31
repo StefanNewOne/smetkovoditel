@@ -63,6 +63,11 @@ enum BillingMode {
   FIXED
 }
 
+enum BillingCycle {
+  MONTHLY
+  QUARTERLY
+}
+
 enum MatchStatus {
   UNMATCHED
   AUTO_MATCHED
@@ -80,19 +85,26 @@ enum CashDocType {
   KASA_ISPLATI
 }
 
-enum ExpenseCategory {
-  OPERATIONS
-  ADS
-  ACTORS
-  EQUIPMENT
-  FUEL
-  RENT
-  UTILITIES
-  PHONE
-  BANK_FEES
-  SALARY
-  HONORAR
-  OTHER
+// Expense categories are data (SM-99): the owner can add/rename custom categories. System categories
+// (ADS/ACTORS/SALARY/HONORAR/BANK_FEES) carry billing/payroll/report logic — their `key` is immutable
+// and they cannot be deleted; only the label is editable. `kind` keeps P&L grouping stable.
+enum CategoryKind {
+  OPERATING
+  BILLABLE // pass-through to a client invoice (ADS/ACTORS — B15/B16)
+  PAYROLL
+  BANK
+}
+
+model Category {
+  key         String       @id // stable code, e.g. "ADS" — referenced by Expense/VendorRule
+  label       String // Macedonian display label (editable)
+  system      Boolean      @default(false) // load-bearing: key immutable, undeletable
+  kind        CategoryKind @default(OPERATING)
+  sortOrder   Int          @default(0)
+  active      Boolean      @default(true)
+  recurring   Boolean      @default(false) // SM-100: fixed monthly overhead → ТЕКОВНИ ТРОШОЦИ screen
+  expenses    Expense[]
+  vendorRules VendorRule[]
 }
 
 enum ContractorType {
@@ -139,26 +151,43 @@ model Client {
   vatApplicable   Boolean                 @default(true)
   paymentTermDays Int                     @default(15)
   status          ClientStatus            @default(ACTIVE)
+  number          Int?                    @unique // фиксен интерен број на клиент (нумерирање фактури SM-87)
+  startDate       DateTime? // од кога клиентот е активен (гони W1 + тромесечен циклус)
   creditBalance   Int                     @default(0) // преплата → авто-примена на следен Charge (B18)
   packages        ServicePackage[]
   lineTemplates   RecurringLineTemplate[]
   charges         Charge[]
   adAccounts      AdAccount[]
+  bankAccounts    ClientBankAccount[]
   payments        Payment[]
   expenses        Expense[]
   createdAt       DateTime                @default(now())
 }
 
+// Жиро-сметки на клиент (SM-85). Влезна уплата се спарува по counterpartyAccount → клиент (SM-90),
+// бидејќи кириличното име на плаќачот е нечитливо во PDF фонтот.
+model ClientBankAccount {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  account   String   @unique // "300-0000052043-77"
+  label     String?
+  createdAt DateTime @default(now())
+
+  @@index([clientId])
+}
+
 model ServicePackage {
-  id            String    @id @default(cuid())
+  id            String       @id @default(cuid())
   clientId      String
-  client        Client    @relation(fields: [clientId], references: [id])
-  monthlyAmount Int // ОСНОВИЦА, МКД integer дени
+  client        Client       @relation(fields: [clientId], references: [id])
+  monthlyAmount Int // ОСНОВИЦА за еден циклус, МКД integer дени (тромесечен = 3-месечна сума)
+  billingCycle  BillingCycle @default(MONTHLY) // месечен / тромесечен (SM-88)
   description   String?
   effectiveFrom DateTime
   effectiveTo   DateTime?
   createdById   String
-  createdAt     DateTime  @default(now())
+  createdAt     DateTime     @default(now())
 
   @@index([clientId])
 }
@@ -182,7 +211,8 @@ model Charge {
   kind            ChargeKind
   period          String // "2026-08"
   seqInMonth      Int?
-  invoiceNumber   String? // "1-2/7-2026"; null за CASH_OBLIGATION
+  invoiceNumber   String? @unique // легален број; null за CASH_OBLIGATION (NULL-ови се дозволени повеќе)
+  internalRef     String? // интерна референца "1-{clientNo}/{M}-{YYYY}" (SM-87), за сите фактури
   issueDate       DateTime
   dueDate         DateTime
   status          ChargeStatus
@@ -197,7 +227,10 @@ model Charge {
   payments        Payment[]
   pdfUrl          String?
 
-  @@unique([clientId, period, kind])
+  // B12 relaxed (owner decision): multiple invoices per client per month are allowed. W1 still
+  // generates the recurring charge once per (client, period, kind) via a findFirst idempotency guard;
+  // extra invoices are added manually / by import.
+  @@index([clientId, period, kind])
   @@unique([seqInMonth, period])
 }
 
@@ -258,7 +291,8 @@ model CashLedgerEntry {
 // ============ EXPENSES ============
 model Expense {
   id                  String             @id @default(cuid())
-  category            ExpenseCategory
+  category            String // Category.key (SM-99); FK below
+  categoryRef         Category           @relation(fields: [category], references: [key], onDelete: Restrict)
   vendor              String?
   amount              Int
   vatAmount           Int?
@@ -380,16 +414,18 @@ model StatementLine {
   payment             Payment?
   expense             Expense?
   adSpendReceipt      AdSpendReceipt?
+  loanEntry           LoanEntry?
 
   @@index([importId])
 }
 
 model VendorRule {
-  id       String          @id @default(cuid())
-  pattern  String
-  category ExpenseCategory
-  vendor   String?
-  hits     Int             @default(0)
+  id          String   @id @default(cuid())
+  pattern     String
+  category    String // Category.key (SM-99)
+  categoryRef Category @relation(fields: [category], references: [key], onDelete: Restrict)
+  vendor      String?
+  hits        Int      @default(0)
 }
 
 model ExchangeRate {
@@ -455,6 +491,37 @@ model Period {
   closedAt    DateTime?
   closedById  String?
   cashEntries CashLedgerEntry[]
+  loanEntries LoanEntry[]
+}
+
+// SM-100/SM-102: owner/private-person loans — a financing flow (liability/receivable), never revenue
+// or expense. Four kinds (SM-102): RECEIVED (примена, IN) / REPAID (поврат, OUT) form the company's
+// liability; GIVEN (дадена, OUT) / COLLECTED (наплата, IN) form its receivable. Never touches
+// Charges/Expenses or P&L. Rule #1: linked to its bank line.
+enum LoanKind {
+  RECEIVED // примена — a person lent to the company (IN)
+  REPAID // поврат — the company paid a person back (OUT)
+  GIVEN // дадена — the company lent to a person (OUT)
+  COLLECTED // наплата — a person paid the company back (IN)
+}
+
+model LoanEntry {
+  id              String         @id @default(cuid())
+  lenderName      String
+  direction       Direction // bank direction of the line (IN/OUT)
+  kind            LoanKind       @default(RECEIVED) // SM-102: primena/поврат/дадена/наплата
+  amount          Int // дени
+  date            DateTime
+  note            String?
+  attachmentUrl   String? // договор за заем (по желба)
+  statementLineId String?        @unique
+  statementLine   StatementLine? @relation(fields: [statementLineId], references: [id])
+  periodId        String
+  period          Period         @relation(fields: [periodId], references: [id])
+  createdById     String
+  createdAt       DateTime       @default(now())
+
+  @@index([lenderName])
 }
 
 model AuditLog {
@@ -475,4 +542,30 @@ model User {
   email        String @unique
   role         String
   passwordHash String // app-managed session auth (ADR-001 A3)
+}
+
+// SM-111 — durable, acknowledgeable alarm record for import/worker integrity failures (Master Plan
+// §13, B14, §4.4). Raised alongside the structured log; best-effort emailed. Not append-only forever:
+// a writer acknowledges it (stamps acknowledgedAt/acknowledgedById) — the row itself is never edited
+// otherwise and never deleted.
+enum AlertType {
+  INTEGRITY_FAILED
+  CONTINUITY_GAP
+  IMPORT_FAILED
+  RATE_SANITY
+  MATCH_ERROR
+}
+
+model SystemAlert {
+  id               String    @id @default(cuid())
+  type             AlertType
+  severity         String // "error" | "warn"
+  title            String
+  detail           String
+  context          Json?
+  createdAt        DateTime  @default(now())
+  acknowledgedAt   DateTime?
+  acknowledgedById String?
+
+  @@index([acknowledgedAt, createdAt])
 }

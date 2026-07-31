@@ -8,15 +8,18 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace=@smetko/web",
+    "dev": "dotenv -e .env.local -- npm run dev --workspace=@smetko/web",
     "build": "npm run db:generate && npm run build --workspace=@smetko/web",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "test:integration": "npm run test:integration --workspace=@smetko/web",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
     "db:generate": "npm run generate --workspace=@smetko/db",
     "db:migrate": "npm run migrate --workspace=@smetko/db",
     "db:studio": "npm run studio --workspace=@smetko/db",
+    "db:seed": "dotenv -e .env.local -- npm run seed --workspace=@smetko/db",
+    "import:historical": "dotenv -e .env.local -- tsx scripts/import-historical.ts",
     "commit": "cz",
     "prepare": "husky"
   },
@@ -33,6 +36,7 @@
     "@commitlint/config-conventional": "^19.5.0",
     "@commitlint/cz-commitlint": "^19.5.0",
     "commitizen": "^4.3.1",
+    "dotenv-cli": "^8.0.0",
     "husky": "^9.1.6",
     "lint-staged": "^15.2.10",
     "prettier": "^3.3.3",

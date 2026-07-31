@@ -1,12 +1,5 @@
 import "server-only";
-import {
-  CashDocType,
-  Direction,
-  ExpenseCategory,
-  PayChannel,
-  type Prisma,
-  prisma,
-} from "@smetko/db";
+import { CashDocType, Direction, PayChannel, type Prisma, prisma } from "@smetko/db";
 import {
   type CalcHonorarInput,
   type PayoutInput,
@@ -15,6 +8,7 @@ import {
 } from "@smetko/shared";
 import { writeAudit } from "@/lib/audit";
 import { assertPeriodOpen } from "@/lib/period-guard";
+import { lockCashLedger } from "@/lib/locks";
 
 interface Allocation {
   clientId: string;
@@ -26,6 +20,13 @@ interface Allocation {
 export async function calcHonorar(input: CalcHonorarInput, userId: string) {
   const contractor = await prisma.contractor.findUnique({ where: { id: input.contractorId } });
   if (!contractor) throw new Error("Хонорарецот не постои.");
+
+  // D2/B16: only talent contractors' allocations may be billable. A billable allocation on a
+  // non-talent contractor would create a cost that is never expensed/billed — reject it, don't
+  // silently drop it.
+  if (!contractor.isTalent && input.allocations.some((a) => a.billable)) {
+    throw new Error("Само актери (isTalent) можат да имаат билабилни алокации (D2).");
+  }
 
   const taxAmount = withholdingTax(input.grossAmount, contractor.taxMode);
   const netAmount = input.grossAmount - taxAmount;
@@ -66,7 +67,16 @@ export async function payoutHonorar(input: PayoutInput, userId: string) {
   await prisma.$transaction(async (tx) => {
     const payment = await tx.contractorPayment.findUnique({ where: { id: input.paymentId } });
     if (!payment) throw new Error("Пресметката не постои.");
-    if (payment.status === "PAID") return; // already paid — no double payout (T14)
+
+    // T14/B16 — atomically claim CALCULATED→PAID. updateMany takes a row lock, so a concurrent
+    // payout blocks, then sees status PAID and count 0 → returns. This makes a second set of ACTORS
+    // expenses structurally impossible, not merely guarded by a stale read. The refining update at
+    // the end (channel, cashEntryId) stays within this tx and rolls back with everything on error.
+    const claim = await tx.contractorPayment.updateMany({
+      where: { id: payment.id, status: "CALCULATED" },
+      data: { status: "PAID" },
+    });
+    if (claim.count === 0) return; // already paid/claimed by a concurrent run — no double payout
 
     const contractor = await tx.contractor.findUnique({ where: { id: payment.contractorId } });
     if (!contractor) throw new Error("Хонорарецот не постои.");
@@ -78,6 +88,7 @@ export async function payoutHonorar(input: PayoutInput, userId: string) {
       if (!input.documentNumber) throw new Error("Кеш-исплата бара документ (B7).");
       await tx.period.upsert({ where: { id: period }, update: {}, create: { id: period } });
       await assertPeriodOpen(tx, period); // B9
+      await lockCashLedger(tx); // B3 — serialize the never-negative check against concurrent cash-out
 
       const [inAgg, outAgg] = await Promise.all([
         tx.cashLedgerEntry.aggregate({
@@ -117,7 +128,7 @@ export async function payoutHonorar(input: PayoutInput, userId: string) {
         if (!alloc.billable) continue;
         await tx.expense.create({
           data: {
-            category: ExpenseCategory.ACTORS,
+            category: "ACTORS",
             vendor: contractor.name,
             amount: alloc.amount, // allocated BRUTO (Master Plan §5)
             date: new Date(),

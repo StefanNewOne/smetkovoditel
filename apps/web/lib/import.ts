@@ -1,6 +1,7 @@
 import "server-only";
 import { formatMKD } from "@smetko/shared";
 import { prisma } from "@smetko/db";
+import { attachmentRef } from "@/lib/attachments";
 
 export interface StatementRow {
   id: string;
@@ -14,6 +15,28 @@ export interface StatementRow {
   lineCount: number;
   status: string;
   integrityOk: boolean;
+  pdfUrl: string | null;
+  pdfName: string | null;
+}
+
+export interface MetaReceiptRow {
+  id: string;
+  referenceNumber: string;
+  metaInvoiceNo: string;
+  accountName: string;
+  clientName: string | null;
+  amountUsd: string;
+  bookedMkd: string | null;
+  date: string;
+  parseStatus: string;
+  matchStatus: string;
+  pdfUrl: string | null;
+  pdfName: string | null;
+}
+
+export interface ChargeOption {
+  id: string;
+  label: string; // "1-3/7-2026 · Client · остаток 12.000"
 }
 
 export interface QueueItem {
@@ -21,6 +44,9 @@ export interface QueueItem {
   title: string;
   amount: string | null;
   context: string;
+  classifiedAs?: string; // for statement-line items
+  direction?: "IN" | "OUT";
+  suggestion?: ChargeOption; // an open charge whose total exactly equals this incoming payment
 }
 
 const d0 = (n: number) => formatMKD(n, { decimals: 0 });
@@ -29,14 +55,21 @@ const dt = (d: Date) =>
 
 /** Import center data: statements + the 4 attention queues (§9.4). */
 export async function getImportCenter() {
-  const [statements, qLines, qReceipts, qFacebk, qPartial, qFailed] = await Promise.all([
+  const [statements, qPayments, qLines, qReceipts, qFacebk, qPartial, qFailed] = await Promise.all([
     prisma.bankStatementImport.findMany({
       orderBy: { statementNumber: "desc" },
-      take: 20,
+      take: 400, // SM-93: show all statements (scrollable), not just the latest 20
       include: { _count: { select: { lines: true } } },
     }),
+    // Incoming bank payments not yet matched to a charge (client paid, maybe without a повик).
     prisma.statementLine.findMany({
-      where: { processed: false, classifiedAs: { in: ["CARD_TX", "OTHER", "CLIENT_PAYMENT"] } },
+      where: { processed: false, direction: "IN" },
+      orderBy: { amount: "desc" },
+      take: 200,
+    }),
+    // Outgoing lines that did not auto-categorize (fees / uncategorized card) — noise to resolve.
+    prisma.statementLine.findMany({
+      where: { processed: false, direction: "OUT", classifiedAs: { in: ["CARD_TX", "OTHER"] } },
       orderBy: { date: "desc" },
       take: 50,
     }),
@@ -48,6 +81,46 @@ export async function getImportCenter() {
     prisma.adSpendReceipt.findMany({ where: { parseStatus: "PARTIAL" }, take: 50 }),
     prisma.bankStatementImport.findMany({ where: { status: "FAILED" }, take: 50 }),
   ]);
+
+  // All uploaded Meta invoices (legal documents) — reviewable regardless of match state, with the
+  // attributed client (via the booked Expense, else the AdAccount mapping) and the booked MKD.
+  const [receiptsAll, adAccounts] = await Promise.all([
+    prisma.adSpendReceipt.findMany({
+      orderBy: { invoiceDate: "desc" },
+      take: 400,
+      include: {
+        expense: { include: { client: { select: { name: true, number: true } } } },
+        statementLine: { select: { amount: true } },
+      },
+    }),
+    prisma.adAccount.findMany({ include: { client: { select: { name: true, number: true } } } }),
+  ]);
+  const accClientMap = new Map(adAccounts.map((a) => [a.metaAccountId, a.client]));
+
+  // Open charges offered as manual-match targets for unresolved CLIENT_PAYMENT lines (§9.4).
+  const open = await prisma.charge.findMany({
+    where: {
+      kind: "INVOICE",
+      invoiceNumber: { not: null },
+      status: { in: ["OPEN", "PARTIALLY_PAID", "OVERDUE"] },
+    },
+    include: { client: { select: { name: true } } },
+    orderBy: { seqInMonth: "desc" },
+    take: 100,
+  });
+  const optionOf = (c: (typeof open)[number]): ChargeOption => ({
+    id: c.id,
+    label: `${c.invoiceNumber} · ${c.client.name} · остаток ${d0(c.total - c.paidAmount)}`,
+  });
+  const openCharges: ChargeOption[] = open.map(optionOf);
+  // Suggest by amount: an incoming payment whose value EXACTLY equals a single open charge's total
+  // is very likely that invoice (client paid without a повик). A suggestion only — human confirms.
+  const openByTotal = new Map<number, typeof open>();
+  for (const c of open) {
+    const list = openByTotal.get(c.total) ?? [];
+    list.push(c);
+    openByTotal.set(c.total, list);
+  }
 
   const statementRows: StatementRow[] = statements.map((s) => ({
     id: s.id,
@@ -61,13 +134,48 @@ export async function getImportCenter() {
     lineCount: s._count.lines,
     status: s.status,
     integrityOk: s.status === "PARSED" && s._count.lines === s.orderCount,
+    ...attachmentRef(s.fileRef),
   }));
 
+  const clientLabel = (c: { name: string; number: number | null } | null | undefined) =>
+    c ? (c.number != null ? `#${c.number} ${c.name}` : c.name) : null;
+  const metaReceipts: MetaReceiptRow[] = receiptsAll.map((r) => {
+    const client =
+      r.expense?.client ?? (r.metaAccountId ? accClientMap.get(r.metaAccountId) : null);
+    const booked = r.statementLine?.amount ?? r.expense?.amount ?? null;
+    return {
+      id: r.id,
+      referenceNumber: r.referenceNumber,
+      metaInvoiceNo: r.metaInvoiceNo,
+      accountName: r.accountName,
+      clientName: clientLabel(client),
+      amountUsd: `$${(r.amountUsd / 100).toFixed(2)}`,
+      bookedMkd: booked != null ? `${d0(booked)} ден` : null,
+      date: dt(r.invoiceDate),
+      parseStatus: r.parseStatus,
+      matchStatus: r.matchStatus,
+      ...attachmentRef(r.attachmentUrl),
+    };
+  });
+
+  const payments: QueueItem[] = qPayments.map((l) => {
+    const exact = openByTotal.get(l.amount);
+    return {
+      id: l.id,
+      title: l.reference ? `Уплата (повик ${l.reference})` : "Уплата без повик",
+      amount: `+${d0(l.amount)}`,
+      context: l.counterpartyAccount ?? l.description ?? "",
+      direction: "IN" as const,
+      suggestion: exact && exact.length === 1 ? optionOf(exact[0]!) : undefined,
+    };
+  });
   const lines: QueueItem[] = qLines.map((l) => ({
     id: l.id,
     title: l.description || l.classifiedAs || "Извод-линија",
-    amount: `${l.direction === "IN" ? "+" : "−"}${d0(l.amount)}`,
-    context: `${l.classifiedAs ?? "?"} · ${l.reference ?? l.counterpartyAccount ?? ""}`,
+    amount: `−${d0(l.amount)}`,
+    context: `${l.classifiedAs ?? "?"} · ${l.counterpartyAccount ?? ""}`,
+    classifiedAs: l.classifiedAs ?? undefined,
+    direction: "OUT" as const,
   }));
   const receipts: QueueItem[] = qReceipts.map((r) => ({
     id: r.id,
@@ -96,5 +204,10 @@ export async function getImportCenter() {
     })),
   ];
 
-  return { statements: statementRows, queues: { lines, receipts, facebk, partial } };
+  return {
+    statements: statementRows,
+    metaReceipts,
+    queues: { payments, lines, receipts, facebk, partial },
+    openCharges,
+  };
 }

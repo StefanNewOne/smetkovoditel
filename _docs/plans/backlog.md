@@ -67,3 +67,137 @@ Legend — **Type:** Feature / Modification / Bug / Anomaly / Maintenance / Test
 | SM-70 | Feature | Reports (P&L, margin per client, aging, cash flow)         | §9.7            | ☑      |
 | SM-71 | Feature | W9 accountant ZIP package (6 sections, xlsx exports)       | W9              | ☑      |
 | SM-72 | Testing | End-to-end verification + margin cross-check for 3 clients | §10 Ф4          | ☑      |
+
+## Progress — 2026-07-17 (completion & full test coverage)
+
+Per `completion-and-testing.md`. All work packages landed; the suite is green from a clean
+checkout (`docker compose up -d db` → unit + integration + E2E).
+
+| ID    | Change                                                                                                                                   | Status |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| SM-20 | Vitest + Docker-Postgres integration harness; T9/T10/T11/T12/T13/T14 + B1/B3/B5/B8/B12/B15/B16/B18 codified                              | ☑      |
+| SM-38 | Redacted committed golden fixtures (146/149 + 3 Meta) + golden test; W2 matching (T7) + integrity (B14) + dedupe (B13) integration       | ☑      |
+| SM-37 | W7 НБРМ USD mid cron: parser, upsert, fallback+staleness, guarded endpoint, worker wired                                                 | ☑      |
+| SM-30 | Gmail ingestion pipeline (routing/dedupe/labelling) + REST adapter + endpoint + worker. Live OAuth deferred to go-live                   | ◐      |
+| SM-50 | Tiered reminders (due+7/+21/+30), dedup via `reminder.sent`, Gmail sender, dunning endpoint                                              | ☑      |
+| SM-5  | RBAC guards (typed 401/403) wired into all 8 mutating action files; AuditLog trail verified                                              | ☑      |
+| SM-2  | `gitleaks` pre-commit hook                                                                                                               | ☑      |
+| SM-3  | web + worker Dockerfiles (multi-stage, non-root)                                                                                         | ☑      |
+| SM-7  | `docker-compose.prod.yml`, full `deploy.sh` (backup→migrate→health→rollback), Nginx/Certbot + staging/production runbooks, `/api/health` | ☑      |
+| —     | Playwright E2E (login → dashboard) against a seeded `smetko_e2e` DB                                                                      | ☑      |
+| SM-73 | `npm run dev` loads the root `.env.local` via `dotenv-cli` (was: `next dev` ran from `apps/web` and never saw the root env)              | ☑      |
+
+**Test totals:** 27 unit + 60 integration + 2 E2E = **89 green**. Lint/typecheck/build pass.
+**Remaining for go-live (needs secrets/VPS, not code):** connect Gmail OAuth (SM-30 live step),
+fill `<vps-ip>`/`<url>` placeholders, install `gitleaks` binary on dev machines.
+
+## Audit fixes — 2026-07-17 (from full-system review)
+
+| ID    | Type    | Change                                                                                                                                                                                                                                                                                                      | Status |
+| ----- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| SM-74 | Bug     | ±6% USD rate sanity now computed in `runMatching` vs НБРМ mid; out-of-band → `match.alarm` warn + `rateSanityOk` in audit. Booked MKD unchanged (§4.4)                                                                                                                                                      | ☑      |
+| SM-75 | Bug     | Statement continuity gate — opening == prior (N-1) closing; mismatch → FAILED, posts nothing (B14)                                                                                                                                                                                                          | ☑      |
+| SM-76 | Bug     | Period guards: W2 match leaves closed-period payments unprocessed; W4 markOverdue excludes closed periods (B9)                                                                                                                                                                                              | ☑      |
+| SM-77 | Bug     | Billable allocation on a non-talent contractor is rejected in `calcHonorar` (D2) — no silent cost loss                                                                                                                                                                                                      | ☑      |
+| SM-78 | Feature | Import-center queue resolution: re-run matching, manual match a payment line to a charge, ignore a noise line (§9.4)                                                                                                                                                                                        | ☑      |
+| SM-79 | Feature | Bulk historical importer (clients + packages + charges w/ real numbers + payments + opening balances) + CSV CLI + templates; numbering continues from imported max; idempotent; dry-run                                                                                                                     | ☑      |
+| SM-80 | Bug     | NLB parser hardened to 100% on real statements (was 121/152). pdf-parse flattens the Задолжување/Побарување columns → direction was guessed; new positional parser (parseNlbFromPdf) reads token X-coordinates for column-accurate direction; ingestStatementPdf path; text parser kept for golden fixtures | ☑      |
+
+**Not bugs (verified against Master Plan, flagged by the automated review but correct):** VAT on
+ADS/ACTORS invoice lines (whole invoice is 18%-VATed — standard MK treatment); a unique
+`ContractorPayment(contractor, period)` would be wrong (multiple honorari per month are legal).
+**Cosmetic/deferred:** Dashboard KPIs and client "Маргина YTD" show "—" (marked Во изградба).
+
+## Statement resolution — 2026-07-20 (developer request)
+
+Per `statement-resolution.md`. A dedicated **Решавање** screen for the two Import queues, with a
+client-filtered payment matcher and expense categorization + vendor learning.
+
+| ID    | Type         | Title                                                                                                                                                                                     | Master Plan ref | Status |
+| ----- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ------ |
+| SM-81 | Feature      | Решавање screen: Уплати (client-filtered invoice pick) + Трошоци (categorize) sections; Import keeps alarm queues                                                                         | §9.4            | ☑      |
+| SM-82 | Modification | NLB parser captures payer **account** (Cyrillic names garbled by the PDF font; lineHash byte-stable) + backfill (733 lines) + account→client suggest learned from matched-payment history | §4.2            | ☑      |
+| SM-83 | Feature      | `categorizeStatementLine` → Expense (B6, B9 atomic) + VendorRule "remember vendor"; migration adds REPRESENTATION/MARKETING                                                               | §4.2, B6        | ☑      |
+
+## Responsive layout — 2026-07-20 (developer request)
+
+Per `responsive.md`. The shell forced `min-w-[1180px]` with no breakpoints → every screen overflowed
+smaller viewports. Fixed in three levels (A stop-overflow, B stacking, C mobile sidebar).
+
+| ID    | Type         | Title                                                                                          | Ref | Status |
+| ----- | ------------ | ---------------------------------------------------------------------------------------------- | --- | ------ |
+| SM-84 | Modification | Responsive layout: drop min-w-[1180px], stack 2-col grids, scroll/stack tables, drawer sidebar | UI  | ☑      |
+
+Levels A (stop overflow), B (stack under lg), C (mobile drawer sidebar under md) all landed.
+
+## Revision 1 — owner system review (2026-07-20)
+
+Per `revision-1.md`. Deferred to the end: attention-queue/FACEBK redesign, the `4080012325273`
+identification.
+
+| ID    | Type         | Title                                                                                          | Ref  | Status |
+| ----- | ------------ | ---------------------------------------------------------------------------------------------- | ---- | ------ |
+| SM-85 | Feature      | Client fixed number + start date + giro accounts (schema, wizard, profile, backfill)           | §3   | ☐      |
+| SM-86 | Feature      | Delete (cascade + free statement lines + audit) & deactivate client; KESH↔clients recon report | §3   | ☐      |
+| SM-87 | Modification | Dual numbering: internalRef `1-{clientNo}/{month}-{year}` + issue-date-on-approval             | B1   | ☐      |
+| SM-88 | Feature      | Monthly/quarterly `billingCycle` packages; W1 fires on cycle boundary (АБАУТ ХЕР)              | §3   | ☐      |
+| SM-89 | Feature      | Charges split CASH/INVOICE + per-section ИЗВРШИ + delete-draft + НАПЛАТИ / НАПЛАТА КЕШ         | §9.3 | ☐      |
+| SM-90 | Feature      | Решавање: client name from giro account + learn-on-match; new Трошоци expenses list            | §9.4 | ☐      |
+| SM-91 | Feature      | Settings: VendorRule CRUD (add/delete vendor→category)                                         | §4.2 | ☐      |
+| SM-92 | Feature      | Blagajna expense source (cash vs card/bank→statement) + НАПЛАТА КЕШ (cash clients, owed/paid)  | §2   | ☐      |
+| SM-93 | Modification | Import center: statements pagination / show-all + total count                                  | §9.4 | ☐      |
+
+**SM-82 finding:** the NLB PDF renders Cyrillic in a custom font that pdf-parse decodes to private
+glyphs (payer _names_ are unreadable). The payer _account_ is plain ASCII, so it is the reliable
+key: the parser captures it (at/below the amount, outside the classify window — stored only, never
+in the lineHash), and the resolve screen learns `payer-account → client` from each matched payment.
+14/49 open payments got a correct suggestion immediately; coverage grows as more payments match.
+
+## Screen review — 2026-07-29 (developer request)
+
+Owner walked the ТРОШОЦИ / ТЕКОВНИ ТРОШОЦИ / ИЗВЕШТАИ / DASHBOARD screens. Duplicate-expense
+scare investigated and cleared (every expense traces 1:1 to a distinct bank line — no double-count).
+
+| ID     | Type         | Title                                                                                                                      | Ref         | Status |
+| ------ | ------------ | -------------------------------------------------------------------------------------------------------------------------- | ----------- | ------ |
+| SM-99  | Bug          | Трошоци rendered custom category keys (`CAT_…`) — resolve label from `Category.label`, static map fallback                 | §4.2, SM-99 | ☑      |
+| SM-100 | Modification | Тековни трошоци defaulted to the in-progress month (read ~0) → default to last complete month + month stepper              | SM-100      | ☑      |
+| SM-103 | Feature      | Live Dashboard (KPIs, Задолжено vs наплатено, Топ должници, Редици за внимание) per handoff §1 — see `SM-103-dashboard.md` | §9.1        | ☑      |
+
+**ИЗВЕШТАИ „missing clients" (not a bug):** margin-per-client is period-scoped. 2026-07 had 11 of 33
+active clients charged because W1 for July had not been re-run after a dev-data rebuild (29 earlier
+July charges were gone with no delete-audit). Re-ran W1 for 2026-07 → +22 DRAFT charges (11 skipped),
+all 33 active clients now present. The 2 churned clients (#39, #40) remain correctly excluded.
+
+## Full-system audit — 2026-07-30 (developer request)
+
+Segment-by-segment correctness/security review (parsers, matching, charges/numbering, cash,
+contractors, reports, close, auth, schema). SM-110 batches the CRITICAL/HIGH/MED fixes.
+
+| ID     | Type    | Title                                                                                                                                                              | Ref              | Status |
+| ------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- | ------ |
+| SM-110 | Bug     | Audit fixes: numbering uniqueness, period guards, blagajna race, double-ACTORS, matching race, auth                                                                | B1/B3/B9/B13/B16 | ☑      |
+| SM-111 | Feature | Import/worker alerting: durable SystemAlert on integrity/continuity/rate/match failures + best-effort email + /alerts screen with badge — see `SM-111-alerting.md` | §13, B14, §4.4   | ☑      |
+
+**SM-110 fixes shipped:**
+
+- **C1** — `Charge.invoiceNumber` now `@unique` (migration `20260730120000`); the 2026-08+ scheme
+  suffixes the 2nd+ invoice per client/month (`…-2`, `…-3`), so no two invoices share a legal number.
+- **B9 guards** — added `assertPeriodOpen` to `meta.bookFacebkLine` / `manualMatchReceipt` /
+  `mapAdAccount`, `runPayroll`, and `loans.deleteLoanEntry`.
+- **B3** — `pg_advisory_xact_lock` serializes the blagajna never-negative check (W5 cash, W6).
+- **B16/T14** — `payoutHonorar` claims `CALCULATED→PAID` via a row-locking conditional update →
+  a second ACTORS expense set is structurally impossible under concurrency.
+- **B13** — `runMatching` claims the statement line atomically inside the tx; one bad receipt no
+  longer aborts the whole import batch.
+- **Auth** — login runs a dummy bcrypt on unknown email (no timing enumeration), regenerates the
+  session on login (no fixation), and refuses to boot in prod without `SESSION_SECRET`.
+- **Charges** — credit notes capped cumulatively vs the invoice; `approveAllDrafts` surfaces the
+  failed count instead of silently swallowing it.
+- **§2** — `collectCash` rejects a non-CASH client (prevents double-settlement).
+
+**Open (owner decision / follow-up):** `deleteCharge` of an issued invoice still leaves a fiscal-
+counter gap (owner-accepted, UI double-confirms — left unchanged). Deferred hardening: FK
+`onDelete: SetNull → RESTRICT` on provenance links, DB-level `AuditLog` append-only grant,
+issue-date timezone pin to `Europe/Skopje`, move cron secret from query → header. Integration tests
+in `audit-fixes.integration.test.ts` (run with Docker up).

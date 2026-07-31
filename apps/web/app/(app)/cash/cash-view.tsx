@@ -80,9 +80,9 @@ export function CashView({
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-border bg-surface">
+      <div className="overflow-x-auto rounded-xl border border-border bg-surface">
         <div
-          className="grid items-center gap-3 border-b border-border-2 px-5.5 py-3 text-[11px] font-bold uppercase tracking-[0.5px] text-muted-2"
+          className="hidden min-w-[720px] items-center gap-3 border-b border-border-2 px-5.5 py-3 text-[11px] font-bold uppercase tracking-[0.5px] text-muted-2 md:grid"
           style={{ gridTemplateColumns: "90px 1.8fr 1.2fr 1fr 110px 40px" }}
         >
           <span>Датум</span>
@@ -100,23 +100,24 @@ export function CashView({
         {ledger.entries.map((e) => (
           <div
             key={e.id}
-            className="grid items-center gap-3 border-b border-border-3 px-5.5 py-3 text-[13px] last:border-0"
+            className="flex flex-col gap-1 border-b border-border-3 px-4 py-3 text-[13px] last:border-0 md:grid md:min-w-[720px] md:items-center md:gap-3 md:px-5.5"
             style={{ gridTemplateColumns: "90px 1.8fr 1.2fr 1fr 110px 40px" }}
           >
             <span className="text-[12px] text-muted">{e.date}</span>
-            <span className="text-ink">{e.description}</span>
+            <span className="font-semibold text-ink md:font-normal">{e.description}</span>
             <span className="text-[11.5px] text-muted">
+              <span className="text-muted-2 md:hidden">Документ: </span>
               {DOC_LABEL[e.documentType] ?? e.documentType}
               {e.documentNumber ? ` бр. ${e.documentNumber}` : ""}
             </span>
             <span className="text-[12px] text-muted-2">{e.counterpartyType}</span>
             <span
-              className={`text-right font-bold ${e.direction === "IN" ? "text-success" : "text-danger"}`}
+              className={`text-left font-bold md:text-right ${e.direction === "IN" ? "text-success" : "text-danger"}`}
             >
               {e.direction === "IN" ? "+" : "−"}
               {formatMKD(e.amount, { decimals: 0 })}
             </span>
-            <span className="text-center text-muted-2">{e.hasAttachment ? "📎" : ""}</span>
+            {e.hasAttachment && <span className="text-muted-2 md:text-center">📎</span>}
           </div>
         ))}
       </div>
@@ -238,6 +239,23 @@ function CollectModal({
           ))}
         </select>
       </label>
+
+      {client && (
+        <div className="mt-3 flex gap-2 text-[12px]">
+          <div className="flex-1 rounded-lg bg-inset px-3 py-2">
+            <span className="block text-[11px] text-muted-2">Должи</span>
+            <span className="font-extrabold text-danger">
+              {formatMKD(client.totalOwed, { decimals: 0 })} ден
+            </span>
+          </div>
+          <div className="flex-1 rounded-lg bg-inset px-3 py-2">
+            <span className="block text-[11px] text-muted-2">Платено</span>
+            <span className="font-extrabold text-success-700">
+              {formatMKD(client.totalPaid, { decimals: 0 })} ден
+            </span>
+          </div>
+        </div>
+      )}
 
       {client && (
         <label className="mt-3 block text-[12px] font-semibold text-muted">
@@ -371,7 +389,7 @@ function Modal({
       className="fixed inset-0 z-[60] flex items-center justify-center p-6"
       style={{ background: "rgba(20,30,48,0.45)" }}
     >
-      <div className="w-[460px] animate-fade-up rounded-[18px] bg-surface p-7">
+      <div className="max-h-[90vh] w-full max-w-[460px] animate-fade-up overflow-y-auto rounded-[18px] bg-surface p-7">
         <div className="mb-5 flex items-center justify-between">
           <h3 className="text-[15px] font-extrabold text-ink">{title}</h3>
           <button onClick={onClose} className="text-[18px] text-muted-2 hover:text-ink">

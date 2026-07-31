@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Manrope } from "next/font/google";
 import "./globals.css";
 
@@ -12,6 +12,8 @@ export const metadata: Metadata = {
   title: "GoDigital Finance OS",
   description: "Сметководител — интерен финансиски систем на АЛМА ДИЗАЈН ДООЕЛ Скопје",
 };
+
+export const viewport: Viewport = { width: "device-width", initialScale: 1 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

@@ -6,13 +6,7 @@ import { FileText, Plus, Wallet, X } from "lucide-react";
 import { formatMKD, parseDenari, vatOf, withVat, type PaymentChannelValue } from "@smetko/shared";
 import { createClient } from "./actions";
 
-const STEPS = [
-  "Основни податоци",
-  "Канал на наплата",
-  "Месечен пакет",
-  "Дополнителни ставки",
-  "Потврда",
-];
+const STEPS = ["Основни податоци", "Канал на наплата", "Пакет", "Дополнителни ставки", "Потврда"];
 
 interface AdAccount {
   metaAccountId: string;
@@ -46,6 +40,9 @@ export function NewClientWizard() {
   const [channel, setChannel] = useState<PaymentChannelValue | null>(null);
   const [taxId, setTaxId] = useState("");
   const [amountRaw, setAmountRaw] = useState("");
+  const [cycle, setCycle] = useState<"MONTHLY" | "QUARTERLY">("MONTHLY");
+  const [startDate, setStartDate] = useState("");
+  const [giroAccounts, setGiroAccounts] = useState<string[]>([]);
   const [metaAds, setMetaAds] = useState(false);
   const [actors, setActors] = useState(false);
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
@@ -62,6 +59,9 @@ export function NewClientWizard() {
     setChannel(null);
     setTaxId("");
     setAmountRaw("");
+    setCycle("MONTHLY");
+    setStartDate("");
+    setGiroAccounts([]);
     setMetaAds(false);
     setActors(false);
     setAdAccounts([]);
@@ -74,7 +74,7 @@ export function NewClientWizard() {
 
   const canNext =
     (step === 0 && name.trim().length > 0) ||
-    (step === 1 && channel !== null && (!isInvoice || taxId.trim().length > 0)) ||
+    (step === 1 && channel !== null) || // ЕДБ optional (owner decision)
     (step === 2 && base > 0) ||
     step === 3 ||
     step === 4;
@@ -90,6 +90,9 @@ export function NewClientWizard() {
         contactPhone: phone.trim() || undefined,
         paymentTermDays: 15,
         monthlyAmount: base,
+        billingCycle: cycle,
+        startDate: startDate || undefined,
+        giroAccounts: giroAccounts.map((a) => a.trim()).filter(Boolean),
         metaAds,
         actors,
         adAccounts: adAccounts.filter((a) => a.metaAccountId && a.name),
@@ -119,7 +122,7 @@ export function NewClientWizard() {
           className="fixed inset-0 z-[60] flex items-center justify-center p-6"
           style={{ background: "rgba(20,30,48,0.45)" }}
         >
-          <div className="w-[560px] animate-fade-up rounded-[18px] bg-surface p-7">
+          <div className="max-h-[90vh] w-full max-w-[560px] animate-fade-up overflow-y-auto rounded-[18px] bg-surface p-7">
             <div className="mb-1 flex items-center justify-between">
               <span className="text-[12px] font-bold uppercase tracking-[0.5px] text-muted-2">
                 Чекор {step + 1} од 5 · {STEPS[step]}
@@ -188,7 +191,7 @@ export function NewClientWizard() {
                   />
                 </div>
                 {isInvoice && (
-                  <Field label="ЕДБ (даночен број) — задолжително (B17)">
+                  <Field label="ЕДБ (даночен број) — по желба">
                     <input
                       className={inputCls}
                       value={taxId}
@@ -201,13 +204,57 @@ export function NewClientWizard() {
 
             {step === 2 && (
               <div className="flex flex-col gap-3">
-                <Field label="Основица (месечен пакет, МКД)">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCycle("MONTHLY")}
+                    className={`rounded-lg border-2 p-3 text-left text-[13px] font-bold ${
+                      cycle === "MONTHLY"
+                        ? "border-accent bg-accent-50 text-accent"
+                        : "border-border text-muted hover:bg-inset"
+                    }`}
+                  >
+                    Месечен
+                    <span className="block text-[11px] font-normal text-muted-2">
+                      фактура секој месец
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCycle("QUARTERLY")}
+                    className={`rounded-lg border-2 p-3 text-left text-[13px] font-bold ${
+                      cycle === "QUARTERLY"
+                        ? "border-accent bg-accent-50 text-accent"
+                        : "border-border text-muted hover:bg-inset"
+                    }`}
+                  >
+                    Тромесечен
+                    <span className="block text-[11px] font-normal text-muted-2">
+                      една фактура / 3 месеци
+                    </span>
+                  </button>
+                </div>
+                <Field
+                  label={
+                    cycle === "QUARTERLY"
+                      ? "Основица (за 3 месеци, МКД)"
+                      : "Основица (месечен пакет, МКД)"
+                  }
+                >
                   <input
                     className={inputCls}
                     inputMode="decimal"
                     placeholder="30.000"
                     value={amountRaw}
                     onChange={(e) => setAmountRaw(e.target.value)}
+                  />
+                </Field>
+                <Field label="Стартен датум (од кога влегува во W1)">
+                  <input
+                    className={inputCls}
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
                   />
                 </Field>
                 <div className="rounded-lg bg-inset p-4 text-[13px]">
@@ -227,6 +274,39 @@ export function NewClientWizard() {
 
             {step === 3 && (
               <div className="flex flex-col gap-3">
+                <div className="rounded-lg border border-border-2 p-3">
+                  <p className="mb-2 text-[12px] font-semibold text-muted">
+                    Жиро-сметки (за спарување на уплати)
+                  </p>
+                  {giroAccounts.map((acc, i) => (
+                    <div key={i} className="mb-2 flex gap-2">
+                      <input
+                        className={inputCls}
+                        placeholder="300-0000000000-00"
+                        value={acc}
+                        onChange={(e) =>
+                          setGiroAccounts((prev) =>
+                            prev.map((x, j) => (j === i ? e.target.value : x)),
+                          )
+                        }
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setGiroAccounts((prev) => prev.filter((_, j) => j !== i))}
+                        className="rounded-md border border-border px-2 text-muted hover:bg-inset"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setGiroAccounts((p) => [...p, ""])}
+                    className="text-[12px] font-bold text-accent hover:underline"
+                  >
+                    + Додади жиро-сметка
+                  </button>
+                </div>
                 <Toggle
                   checked={metaAds}
                   onChange={setMetaAds}
@@ -284,7 +364,15 @@ export function NewClientWizard() {
                 <Row label="Клиент" value={name} />
                 <Row label="Канал" value={isInvoice ? "Фактура (+ДДВ)" : "Кеш"} />
                 {isInvoice && <Row label="ЕДБ" value={taxId} />}
+                <Row label="Пакет" value={cycle === "QUARTERLY" ? "Тромесечен" : "Месечен"} />
                 <Row label="Основица" value={`${formatMKD(base)} ден`} />
+                {startDate && <Row label="Стартен датум" value={startDate} />}
+                {giroAccounts.filter((a) => a.trim()).length > 0 && (
+                  <Row
+                    label="Жиро-сметки"
+                    value={`${giroAccounts.filter((a) => a.trim()).length}`}
+                  />
+                )}
                 <Row
                   label="Дополнителни"
                   value={

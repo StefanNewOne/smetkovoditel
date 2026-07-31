@@ -1,0 +1,3 @@
+name,taxId,channel,monthlyAmount,contactEmail,paymentTermDays,packageDescription
+Пример Клиент ДОО,4030000000001,INVOICE,30.000,klient@example.mk,15,Месечен пакет
+Кеш Клиент,,CASH,20.000,,15,Месечно (кеш)

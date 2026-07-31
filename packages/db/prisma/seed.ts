@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { prisma } from "../src/index";
+import { CATEGORY_SEED, prisma } from "../src/index";
 
 /**
  * Phase 0 seed: one admin user, the current open Period, and the АЛМА ДИЗАЈН bank account (D1).
@@ -38,6 +38,15 @@ async function main() {
       openingDate: new Date("2026-07-01T00:00:00Z"),
     },
   });
+
+  // Expense categories (SM-99) — must exist before any VendorRule/Expense references them (FK).
+  for (const c of CATEGORY_SEED) {
+    await prisma.category.upsert({
+      where: { key: c.key },
+      update: { label: c.label, system: c.system, kind: c.kind, sortOrder: c.sortOrder },
+      create: c,
+    });
+  }
 
   // Starter VendorRules for CARD_TX auto-categorization (§4.2, SM-51). go-live extends these.
   const rules: { pattern: string; category: "FUEL" | "OPERATIONS"; vendor?: string }[] = [

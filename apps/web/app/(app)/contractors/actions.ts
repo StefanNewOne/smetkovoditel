@@ -10,15 +10,16 @@ import {
   zCreateContractor,
   zPayout,
 } from "@smetko/shared";
-import { currentUser } from "@/lib/auth";
+import { requireWriter } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
 import { calcHonorar, payoutHonorar } from "@/lib/workflows/w5";
 
 export type Result = { ok: true } | { ok: false; error: string };
 
 export async function createContractorAction(input: CreateContractorInput): Promise<Result> {
-  const user = await currentUser();
-  if (!user) return { ok: false, error: "Не сте најавени." };
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  const user = auth.user;
   const parsed = zCreateContractor.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Невалидни податоци." };
@@ -46,8 +47,9 @@ export async function createContractorAction(input: CreateContractorInput): Prom
 }
 
 export async function calcHonorarAction(input: CalcHonorarInput): Promise<Result> {
-  const user = await currentUser();
-  if (!user) return { ok: false, error: "Не сте најавени." };
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  const user = auth.user;
   const parsed = zCalcHonorar.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Невалидни податоци." };
@@ -61,8 +63,9 @@ export async function calcHonorarAction(input: CalcHonorarInput): Promise<Result
 }
 
 export async function payoutAction(input: PayoutInput): Promise<Result> {
-  const user = await currentUser();
-  if (!user) return { ok: false, error: "Не сте најавени." };
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  const user = auth.user;
   const parsed = zPayout.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Невалидни податоци." };

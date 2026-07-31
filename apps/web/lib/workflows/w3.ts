@@ -22,6 +22,11 @@ export async function collectCash(input: CollectCashInput, userId: string) {
     }
     const client = await tx.client.findUnique({ where: { id: input.clientId } });
     if (!client) throw new Error("Клиентот не постои.");
+    // Master Plan §2 — one source of truth per money flow. Only CASH clients settle via the
+    // blagajna; an INVOICE client's payment is the NLB statement (W2), else it could double-settle.
+    if (client.paymentChannel !== "CASH") {
+      throw new Error("Само кеш-клиенти се наплаќаат преку благајна (§2).");
+    }
 
     const remaining = charge.total - charge.paidAmount;
     const applied = Math.min(input.amount, Math.max(remaining, 0));

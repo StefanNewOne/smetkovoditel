@@ -6,6 +6,8 @@ import { ArrowLeft } from "lucide-react";
 import { formatMKD } from "@smetko/shared";
 import { getClient } from "@/lib/clients";
 import { Avatar, ChannelBadge, StatusBadge } from "@/components/ui/badges";
+import { ClientAdminActions } from "./client-admin-actions";
+import { GiroAccounts } from "./giro-accounts";
 
 function fmtDate(d: Date | null): string {
   return d
@@ -42,18 +44,32 @@ export default async function ClientProfile({ params }: { params: Promise<{ id: 
         <ArrowLeft size={14} /> Клиенти
       </Link>
 
-      <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 320px" }}>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
         {/* Left column */}
         <div className="flex flex-col gap-4">
           <div className="rounded-xl border border-border bg-surface p-6">
-            <div className="flex items-center gap-3.5">
+            <div className="flex flex-wrap items-center gap-3.5">
               <Avatar name={client.name} size={48} />
-              <div>
-                <h2 className="text-[19px] font-extrabold text-ink">{client.name}</h2>
-                <p className="mt-0.5 flex items-center gap-2 text-[12px] text-muted-2">
+              <div className="min-w-0">
+                <h2 className="text-[19px] font-extrabold text-ink">
+                  {client.number != null && (
+                    <span className="mr-1.5 text-muted-2">#{client.number}</span>
+                  )}
+                  {client.name}
+                </h2>
+                <p className="mt-0.5 flex flex-wrap items-center gap-2 text-[12px] text-muted-2">
                   {client.taxId ? `ЕДБ ${client.taxId}` : "без ЕДБ"}
                   <ChannelBadge channel={client.paymentChannel} />
+                  <StatusBadge status={client.status} />
+                  <span>старт: {fmtDate(client.startDate)}</span>
                 </p>
+              </div>
+              <div className="ml-auto">
+                <ClientAdminActions
+                  clientId={client.id}
+                  name={client.name}
+                  status={client.status}
+                />
               </div>
             </div>
             <div className="mt-5 grid grid-cols-4 gap-3">
@@ -98,6 +114,16 @@ export default async function ClientProfile({ params }: { params: Promise<{ id: 
 
         {/* Right column */}
         <div className="flex flex-col gap-4">
+          {client.paymentChannel === "INVOICE" && (
+            <GiroAccounts
+              clientId={client.id}
+              accounts={client.bankAccounts.map((a) => ({
+                id: a.id,
+                account: a.account,
+                label: a.label,
+              }))}
+            />
+          )}
           <div className="rounded-xl border border-border bg-surface p-5">
             <h3 className="text-[14px] font-extrabold text-ink">Пакет-историја</h3>
             <p className="mb-3 mt-0.5 text-[11px] text-muted-2">

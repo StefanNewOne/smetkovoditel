@@ -44,9 +44,9 @@ export default async function ClientsPage({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border bg-surface">
+      <div className="overflow-x-auto rounded-xl border border-border bg-surface">
         <div
-          className="grid items-center border-b border-border-2 px-5.5 py-3 text-[11px] font-bold uppercase tracking-[0.5px] text-muted-2"
+          className="hidden min-w-[720px] items-center border-b border-border-2 px-5.5 py-3 text-[11px] font-bold uppercase tracking-[0.5px] text-muted-2 md:grid"
           style={{ gridTemplateColumns: COLS }}
         >
           <span>Клиент</span>
@@ -67,30 +67,40 @@ export default async function ClientsPage({
           <Link
             key={c.id}
             href={`/clients/${c.id}`}
-            className="grid items-center border-b border-border-3 px-5.5 py-3.5 text-[13px] hover:bg-[#fbfcfe]"
+            className="flex flex-col gap-2 border-b border-border-3 px-4 py-3.5 text-[13px] hover:bg-[#fbfcfe] md:grid md:min-w-[720px] md:items-center md:gap-0 md:px-5.5"
             style={{ gridTemplateColumns: COLS }}
           >
             <span className="flex items-center gap-2.5 font-bold text-ink">
               <Avatar name={c.name} size={30} />
+              {c.number != null && <span className="text-muted-2">#{c.number}</span>}
               {c.name}
             </span>
-            <span>
+            <span className="flex items-center gap-2 md:block">
               <ChannelBadge channel={c.paymentChannel} />
+              <span className="text-[12px] font-semibold text-muted md:hidden">
+                {c.status === "ACTIVE"
+                  ? "Активен"
+                  : c.status === "PAUSED"
+                    ? "Паузиран"
+                    : "Напуштен"}
+              </span>
             </span>
             <span className="text-ink">
+              <span className="text-muted-2 md:hidden">Пакет: </span>
               {c.activePackage
                 ? `${formatMKD(c.activePackage.monthlyAmount, { decimals: 0 })} ден`
                 : "—"}
             </span>
             <span className={c.openAmount > 0 ? "font-bold text-danger" : "text-muted-2"}>
+              <span className="font-normal text-muted-2 md:hidden">Отворено: </span>
               {c.openAmount > 0 ? `${formatMKD(c.openAmount, { decimals: 0 })} ден` : "—"}
             </span>
             <span className="flex flex-wrap gap-1.5 text-[11px] text-muted">
               {c.hasMetaAds && <span className="rounded-md bg-chip px-2 py-0.5">Meta Ads</span>}
               {c.hasActors && <span className="rounded-md bg-chip px-2 py-0.5">Актери</span>}
-              {!c.hasMetaAds && !c.hasActors && <span className="text-muted-2">—</span>}
+              {!c.hasMetaAds && !c.hasActors && <span className="text-muted-2 md:hidden">—</span>}
             </span>
-            <span className="text-[12px] font-semibold text-muted">
+            <span className="hidden text-[12px] font-semibold text-muted md:block">
               {c.status === "ACTIVE" ? "Активен" : c.status === "PAUSED" ? "Паузиран" : "Напуштен"}
             </span>
           </Link>

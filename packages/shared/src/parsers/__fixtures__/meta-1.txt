@@ -1,0 +1,18 @@
+Receipt for Redacted Client One
+Account ID: 500000000000001
+Invoice/Payment Date
+Mar 3, 2026, 2:15 PM
+Payment method
+MasterCard ···· 5001
+Reference Number: AAAA111111
+Transaction ID
+900-100
+Product Type
+Meta ads
+Paid
+$18.00
+$18.00
+Meta Platforms Ireland Limited
+Dublin 4
+Ireland
+Invoice # FBADS-9-1

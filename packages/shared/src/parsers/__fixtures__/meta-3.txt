@@ -1,0 +1,18 @@
+Receipt for Redacted Client Three
+Account ID: 500000000000003
+Invoice/Payment Date
+Mar 3, 2026, 5:05 PM
+Payment method
+MasterCard ···· 5003
+Reference Number: CCCC333333
+Transaction ID
+900-300
+Product Type
+Meta ads
+Paid
+$54.00
+$54.00
+Meta Platforms Ireland Limited
+Dublin 4
+Ireland
+Invoice # FBADS-9-3

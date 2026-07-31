@@ -4,10 +4,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  Bell,
+  CalendarClock,
   Clapperboard,
   Download,
   FileText,
   LayoutDashboard,
+  ListChecks,
+  Megaphone,
+  Receipt,
   Settings,
   Users,
   Wallet,
@@ -21,25 +26,32 @@ const ICONS: Record<string, LucideIcon> = {
   Users,
   FileText,
   Download,
+  ListChecks,
+  Megaphone,
   Wallet,
+  Receipt,
+  CalendarClock,
   Clapperboard,
   BarChart3,
+  Bell,
   Settings,
 };
 
 export function Sidebar({
   user,
   openImportCount = 0,
+  openAlertCount = 0,
   period = "2026-07",
 }: {
   user: CurrentUser;
   openImportCount?: number;
+  openAlertCount?: number;
   period?: string;
 }) {
   const pathname = usePathname();
 
   return (
-    <aside className="flex w-[236px] shrink-0 flex-col border-r border-border bg-surface px-3.5 py-5">
+    <aside className="hidden w-[236px] shrink-0 flex-col border-r border-border bg-surface px-3.5 py-5 md:flex">
       <div className="mb-6 flex items-center gap-2 px-2">
         <span className="rounded-md bg-accent px-2 py-1 text-[15px] font-extrabold tracking-[0.5px] text-white">
           GO
@@ -66,6 +78,11 @@ export function Sidebar({
               {item.key === "import" && openImportCount > 0 && (
                 <span className="rounded-[10px] bg-danger-50 px-2 py-0.5 text-[11px] font-bold text-danger">
                   {openImportCount}
+                </span>
+              )}
+              {item.key === "alerts" && openAlertCount > 0 && (
+                <span className="rounded-[10px] bg-danger-50 px-2 py-0.5 text-[11px] font-bold text-danger">
+                  {openAlertCount}
                 </span>
               )}
             </Link>

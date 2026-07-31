@@ -11,11 +11,18 @@ import { writeAudit } from "@/lib/audit";
  */
 export async function markOverdue(now: Date = new Date(), userId = "system"): Promise<number> {
   const cutoff = addDays(now, -30);
+  // B9: never mutate a charge in a CLOSED period. Exclude them from OVERDUE marking.
+  const closed = await prisma.period.findMany({
+    where: { status: "CLOSED" },
+    select: { id: true },
+  });
+  const closedIds = closed.map((p) => p.id);
   const due = await prisma.charge.findMany({
     where: {
       kind: ChargeKind.INVOICE,
       status: { in: [ChargeStatus.OPEN, ChargeStatus.PARTIALLY_PAID] },
       dueDate: { lt: cutoff },
+      ...(closedIds.length ? { period: { notIn: closedIds } } : {}),
     },
     select: { id: true },
   });

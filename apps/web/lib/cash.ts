@@ -70,13 +70,18 @@ export async function getCashLedger(period: string) {
 export interface CollectClient {
   id: string;
   name: string;
-  charges: { id: string; label: string; remaining: number }[];
+  totalOwed: number;
+  totalPaid: number;
+  charges: { id: string; label: string; remaining: number; paid: number }[];
 }
 
-/** Clients with open charges + those charges, for the cash-collection modal (W3). */
+/** CASH clients with open obligations (SM-92) — for НАПЛАТА КЕШ; shows owed vs paid per client. */
 export async function getCollectionData(): Promise<CollectClient[]> {
   const clients = await prisma.client.findMany({
-    where: { charges: { some: { status: { in: OPEN_STATUSES } } } },
+    where: {
+      paymentChannel: "CASH",
+      charges: { some: { status: { in: OPEN_STATUSES } } },
+    },
     orderBy: { name: "asc" },
     include: {
       charges: {
@@ -86,13 +91,19 @@ export async function getCollectionData(): Promise<CollectClient[]> {
     },
   });
 
-  return clients.map((c) => ({
-    id: c.id,
-    name: c.name,
-    charges: c.charges.map((ch) => ({
+  return clients.map((c) => {
+    const charges = c.charges.map((ch) => ({
       id: ch.id,
       label: ch.invoiceNumber ?? `Кеш обврска ${ch.period}`,
       remaining: ch.total - ch.paidAmount,
-    })),
-  }));
+      paid: ch.paidAmount,
+    }));
+    return {
+      id: c.id,
+      name: c.name,
+      totalOwed: charges.reduce((s, x) => s + x.remaining, 0),
+      totalPaid: charges.reduce((s, x) => s + x.paid, 0),
+      charges,
+    };
+  });
 }

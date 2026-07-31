@@ -11,7 +11,8 @@ const OPEN_STATUSES: ChargeStatus[] = [
 export async function getClients(channel?: "INVOICE" | "CASH") {
   const clients = await prisma.client.findMany({
     where: channel ? { paymentChannel: channel } : undefined,
-    orderBy: { name: "asc" },
+    // Order by the fixed client number (реден број); unnumbered clients fall to the bottom.
+    orderBy: [{ number: { sort: "asc", nulls: "last" } }, { name: "asc" }],
     include: {
       packages: { orderBy: { effectiveFrom: "desc" } },
       lineTemplates: { where: { active: true } },
@@ -22,18 +23,21 @@ export async function getClients(channel?: "INVOICE" | "CASH") {
     },
   });
 
-  return clients.map((c) => ({
-    id: c.id,
-    name: c.name,
-    taxId: c.taxId,
-    paymentChannel: c.paymentChannel,
-    status: c.status,
-    creditBalance: c.creditBalance,
-    activePackage: c.packages.find((p) => p.effectiveTo === null) ?? c.packages[0] ?? null,
-    openAmount: c.charges.reduce((sum, ch) => sum + (ch.total - ch.paidAmount), 0),
-    hasMetaAds: c.lineTemplates.some((t) => t.type === "META_ADS"),
-    hasActors: c.lineTemplates.some((t) => t.type === "ACTORS"),
-  }));
+  return clients
+    .map((c) => ({
+      id: c.id,
+      number: c.number,
+      name: c.name,
+      taxId: c.taxId,
+      paymentChannel: c.paymentChannel,
+      status: c.status,
+      creditBalance: c.creditBalance,
+      activePackage: c.packages.find((p) => p.effectiveTo === null) ?? c.packages[0] ?? null,
+      openAmount: c.charges.reduce((sum, ch) => sum + (ch.total - ch.paidAmount), 0),
+      hasMetaAds: c.lineTemplates.some((t) => t.type === "META_ADS"),
+      hasActors: c.lineTemplates.some((t) => t.type === "ACTORS"),
+    }))
+    .sort((a, b) => (a.status === "ACTIVE" ? 0 : 1) - (b.status === "ACTIVE" ? 0 : 1));
 }
 
 /** One client with full profile data (package history, charges, extras). */
@@ -44,6 +48,7 @@ export async function getClient(id: string) {
       packages: { orderBy: { effectiveFrom: "desc" } },
       lineTemplates: { where: { active: true } },
       adAccounts: true,
+      bankAccounts: { orderBy: { createdAt: "asc" } },
       charges: { orderBy: { issueDate: "desc" }, include: { lines: true } },
     },
   });

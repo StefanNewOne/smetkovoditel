@@ -1,0 +1,18 @@
+Receipt for Тест Клиент Кирилица
+Account ID: 500000000000002
+Invoice/Payment Date
+Mar 3, 2026, 3:40 PM
+Payment method
+MasterCard ···· 5002
+Reference Number: BBBB222222
+Transaction ID
+900-200
+Product Type
+Meta ads
+Paid
+$36.00
+$36.00
+Meta Platforms Ireland Limited
+Dublin 4
+Ireland
+Invoice # FBADS-9-2

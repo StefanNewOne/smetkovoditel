@@ -45,3 +45,23 @@ test-results/
 
 # Local-only real financial fixtures (never commit — public repo)
 _fixtures/
+
+# Historical import — real client/financial data stays local; templates + README are committed
+_import/*
+!_import/*.example
+!_import/README.md
+
+# Real source data dropped in root for import (NEVER commit — real financial PII)
+/Фактури/
+/Фактури*.csv
+/Фактури*.pdf
+/Фактури за Клиенти*/
+
+# Derived real financial data (FACEBK charges without receipts)
+FACEBK-*.csv
+
+# One-time go-live data-load scripts (embed real client names — keep local)
+/scripts/assign-client-numbers.ts
+/scripts/reconcile-invoices.ts
+/scripts/fix-meta-attribution.ts
+/scripts/seed-adaccounts.ts

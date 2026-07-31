@@ -543,3 +543,29 @@ model User {
   role         String
   passwordHash String // app-managed session auth (ADR-001 A3)
 }
+
+// SM-111 — durable, acknowledgeable alarm record for import/worker integrity failures (Master Plan
+// §13, B14, §4.4). Raised alongside the structured log; best-effort emailed. Not append-only forever:
+// a writer acknowledges it (stamps acknowledgedAt/acknowledgedById) — the row itself is never edited
+// otherwise and never deleted.
+enum AlertType {
+  INTEGRITY_FAILED
+  CONTINUITY_GAP
+  IMPORT_FAILED
+  RATE_SANITY
+  MATCH_ERROR
+}
+
+model SystemAlert {
+  id               String    @id @default(cuid())
+  type             AlertType
+  severity         String // "error" | "warn"
+  title            String
+  detail           String
+  context          Json?
+  createdAt        DateTime  @default(now())
+  acknowledgedAt   DateTime?
+  acknowledgedById String?
+
+  @@index([acknowledgedAt, createdAt])
+}

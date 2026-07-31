@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import { FileCheck2 } from "lucide-react";
 import { formatMKD } from "@smetko/shared";
 import { getClients } from "@/lib/clients";
 import { Avatar, ChannelBadge } from "@/components/ui/badges";
@@ -12,7 +13,7 @@ const FILTERS = [
   { key: "CASH", label: "Кеш" },
 ] as const;
 
-const COLS = "2fr 1fr 1fr 1fr 1.2fr 0.8fr";
+const COLS = "2fr 1fr 1fr 1fr 1.2fr 0.9fr 0.8fr";
 
 export default async function ClientsPage({
   searchParams,
@@ -46,7 +47,7 @@ export default async function ClientsPage({
 
       <div className="overflow-x-auto rounded-xl border border-border bg-surface">
         <div
-          className="hidden min-w-[720px] items-center border-b border-border-2 px-5.5 py-3 text-[11px] font-bold uppercase tracking-[0.5px] text-muted-2 md:grid"
+          className="hidden min-w-[800px] items-center border-b border-border-2 px-5.5 py-3 text-[11px] font-bold uppercase tracking-[0.5px] text-muted-2 md:grid"
           style={{ gridTemplateColumns: COLS }}
         >
           <span>Клиент</span>
@@ -54,6 +55,7 @@ export default async function ClientsPage({
           <span>Месечен пакет</span>
           <span>Отворено</span>
           <span>Дополнителни</span>
+          <span>Договор</span>
           <span>Статус</span>
         </div>
 
@@ -67,7 +69,7 @@ export default async function ClientsPage({
           <Link
             key={c.id}
             href={`/clients/${c.id}`}
-            className="flex flex-col gap-2 border-b border-border-3 px-4 py-3.5 text-[13px] hover:bg-[#fbfcfe] md:grid md:min-w-[720px] md:items-center md:gap-0 md:px-5.5"
+            className="flex flex-col gap-2 border-b border-border-3 px-4 py-3.5 text-[13px] hover:bg-[#fbfcfe] md:grid md:min-w-[800px] md:items-center md:gap-0 md:px-5.5"
             style={{ gridTemplateColumns: COLS }}
           >
             <span className="flex items-center gap-2.5 font-bold text-ink">
@@ -99,6 +101,16 @@ export default async function ClientsPage({
               {c.hasMetaAds && <span className="rounded-md bg-chip px-2 py-0.5">Meta Ads</span>}
               {c.hasActors && <span className="rounded-md bg-chip px-2 py-0.5">Актери</span>}
               {!c.hasMetaAds && !c.hasActors && <span className="text-muted-2 md:hidden">—</span>}
+            </span>
+            <span className="text-[12px]">
+              <span className="text-muted-2 md:hidden">Договор: </span>
+              {c.hasContract ? (
+                <span className="inline-flex items-center gap-1 font-semibold text-success">
+                  <FileCheck2 size={13} /> Има
+                </span>
+              ) : (
+                <span className="text-muted-2">Нема</span>
+              )}
             </span>
             <span className="hidden text-[12px] font-semibold text-muted md:block">
               {c.status === "ACTIVE" ? "Активен" : c.status === "PAUSED" ? "Паузиран" : "Напуштен"}

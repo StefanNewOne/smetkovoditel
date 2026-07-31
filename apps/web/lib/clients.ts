@@ -36,6 +36,7 @@ export async function getClients(channel?: "INVOICE" | "CASH") {
       openAmount: c.charges.reduce((sum, ch) => sum + (ch.total - ch.paidAmount), 0),
       hasMetaAds: c.lineTemplates.some((t) => t.type === "META_ADS"),
       hasActors: c.lineTemplates.some((t) => t.type === "ACTORS"),
+      hasContract: c.contractUrl != null,
     }))
     .sort((a, b) => (a.status === "ACTIVE" ? 0 : 1) - (b.status === "ACTIVE" ? 0 : 1));
 }

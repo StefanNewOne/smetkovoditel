@@ -178,6 +178,7 @@ contractors, reports, close, auth, schema). SM-110 batches the CRITICAL/HIGH/MED
 | ------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- | ------ |
 | SM-110 | Bug     | Audit fixes: numbering uniqueness, period guards, blagajna race, double-ACTORS, matching race, auth                                                                | B1/B3/B9/B13/B16 | ☑      |
 | SM-111 | Feature | Import/worker alerting: durable SystemAlert on integrity/continuity/rate/match failures + best-effort email + /alerts screen with badge — see `SM-111-alerting.md` | §13, B14, §4.4   | ☑      |
+| SM-112 | Feature | Client cooperation contract: attach/replace/remove a PDF/image per client (writer, audited) + „Договор — Има/Нема" column in the clients list                      | §9.2             | ☑      |
 
 **SM-110 fixes shipped:**
 

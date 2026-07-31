@@ -10,6 +10,7 @@ import {
 } from "@smetko/shared";
 import { requireWriter } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
+import { saveAttachment } from "@/lib/storage";
 import {
   type DeletionImpact,
   deleteClient,
@@ -18,6 +19,82 @@ import {
 } from "@/lib/workflows/client-admin";
 
 export type ActionResult = { ok: true; id: string } | { ok: false; error: string };
+
+const CONTRACT_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+
+/** SM-112 — attach (or replace) a client's cooperation contract. PDF or image; writer only, audited. */
+export async function uploadContractAction(
+  clientId: string,
+  formData: FormData,
+): Promise<ActionResult> {
+  const auth = await requireWriter();
+  if (!auth.ok) return { ok: false, error: auth.error };
+
+  const file = formData.get("contract");
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: "Избери датотека за договорот." };
+  }
+  if (!CONTRACT_TYPES.includes(file.type)) {
+    return { ok: false, error: "Договорот мора да е PDF или слика (JPG/PNG/WEBP)." };
+  }
+  if (file.size > 20 * 1024 * 1024) {
+    return { ok: false, error: "Датотеката е преголема (макс. 20MB)." };
+  }
+
+  try {
+    const bytes = Buffer.from(await file.arrayBuffer());
+    const ext = file.name.split(".").pop() || file.type.split("/").pop() || "pdf";
+    const { url } = await saveAttachment(bytes, ext);
+    await prisma.$transaction(async (tx) => {
+      await tx.client.update({
+        where: { id: clientId },
+        data: { contractUrl: url, contractName: file.name, contractUploadedAt: new Date() },
+      });
+      await writeAudit(tx, {
+        entity: "Client",
+        entityId: clientId,
+        action: "contract.upload",
+        diff: { contractName: file.name },
+        userId: auth.user.id,
+      });
+    });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Прикачувањето не успеа." };
+  }
+  revalidatePath(`/clients/${clientId}`);
+  revalidatePath("/clients");
+  return { ok: true, id: clientId };
+}
+
+/** SM-112 — detach the contract reference (the stored file is kept for the audit trail). */
+export async function removeContractAction(clientId: string): Promise<ActionResult> {
+  const auth = await requireWriter();
+  if (!auth.ok) return { ok: false, error: auth.error };
+  try {
+    await prisma.$transaction(async (tx) => {
+      const before = await tx.client.findUnique({
+        where: { id: clientId },
+        select: { contractName: true },
+      });
+      await tx.client.update({
+        where: { id: clientId },
+        data: { contractUrl: null, contractName: null, contractUploadedAt: null },
+      });
+      await writeAudit(tx, {
+        entity: "Client",
+        entityId: clientId,
+        action: "contract.remove",
+        diff: { contractName: before?.contractName ?? null },
+        userId: auth.user.id,
+      });
+    });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Не успеа." };
+  }
+  revalidatePath(`/clients/${clientId}`);
+  revalidatePath("/clients");
+  return { ok: true, id: clientId };
+}
 
 /** SM-86 — impact preview for the delete confirmation. */
 export async function deletionImpactAction(

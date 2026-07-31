@@ -8,6 +8,7 @@ import { getClient } from "@/lib/clients";
 import { Avatar, ChannelBadge, StatusBadge } from "@/components/ui/badges";
 import { ClientAdminActions } from "./client-admin-actions";
 import { GiroAccounts } from "./giro-accounts";
+import { ClientContract } from "./client-contract";
 
 function fmtDate(d: Date | null): string {
   return d
@@ -114,6 +115,12 @@ export default async function ClientProfile({ params }: { params: Promise<{ id: 
 
         {/* Right column */}
         <div className="flex flex-col gap-4">
+          <ClientContract
+            clientId={client.id}
+            contractUrl={client.contractUrl}
+            contractName={client.contractName}
+            uploadedAt={client.contractUploadedAt ? fmtDate(client.contractUploadedAt) : null}
+          />
           {client.paymentChannel === "INVOICE" && (
             <GiroAccounts
               clientId={client.id}

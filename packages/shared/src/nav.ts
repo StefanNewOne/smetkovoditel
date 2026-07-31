@@ -18,5 +18,6 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "expenses", label: "Трошоци", href: "/expenses", icon: "Receipt" },
   { key: "contractors", label: "Хонорарци", href: "/contractors", icon: "Clapperboard" },
   { key: "reports", label: "Извештаи", href: "/reports", icon: "BarChart3" },
+  { key: "alerts", label: "Аларми", href: "/alerts", icon: "Bell" },
   { key: "settings", label: "Подесувања", href: "/settings", icon: "Settings" },
 ];

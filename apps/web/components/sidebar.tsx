@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  Bell,
   CalendarClock,
   Clapperboard,
   Download,
@@ -32,16 +33,19 @@ const ICONS: Record<string, LucideIcon> = {
   CalendarClock,
   Clapperboard,
   BarChart3,
+  Bell,
   Settings,
 };
 
 export function Sidebar({
   user,
   openImportCount = 0,
+  openAlertCount = 0,
   period = "2026-07",
 }: {
   user: CurrentUser;
   openImportCount?: number;
+  openAlertCount?: number;
   period?: string;
 }) {
   const pathname = usePathname();
@@ -74,6 +78,11 @@ export function Sidebar({
               {item.key === "import" && openImportCount > 0 && (
                 <span className="rounded-[10px] bg-danger-50 px-2 py-0.5 text-[11px] font-bold text-danger">
                   {openImportCount}
+                </span>
+              )}
+              {item.key === "alerts" && openAlertCount > 0 && (
+                <span className="rounded-[10px] bg-danger-50 px-2 py-0.5 text-[11px] font-bold text-danger">
+                  {openAlertCount}
                 </span>
               )}
             </Link>

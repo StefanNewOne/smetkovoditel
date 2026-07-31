@@ -174,9 +174,10 @@ all 33 active clients now present. The 2 churned clients (#39, #40) remain corre
 Segment-by-segment correctness/security review (parsers, matching, charges/numbering, cash,
 contractors, reports, close, auth, schema). SM-110 batches the CRITICAL/HIGH/MED fixes.
 
-| ID     | Type | Title                                                                                               | Ref              | Status |
-| ------ | ---- | --------------------------------------------------------------------------------------------------- | ---------------- | ------ |
-| SM-110 | Bug  | Audit fixes: numbering uniqueness, period guards, blagajna race, double-ACTORS, matching race, auth | B1/B3/B9/B13/B16 | ☑      |
+| ID     | Type    | Title                                                                                                                                                              | Ref              | Status |
+| ------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- | ------ |
+| SM-110 | Bug     | Audit fixes: numbering uniqueness, period guards, blagajna race, double-ACTORS, matching race, auth                                                                | B1/B3/B9/B13/B16 | ☑      |
+| SM-111 | Feature | Import/worker alerting: durable SystemAlert on integrity/continuity/rate/match failures + best-effort email + /alerts screen with badge — see `SM-111-alerting.md` | §13, B14, §4.4   | ☑      |
 
 **SM-110 fixes shipped:**
 

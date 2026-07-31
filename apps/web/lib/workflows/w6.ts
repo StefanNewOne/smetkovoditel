@@ -3,6 +3,7 @@ import { CashDocType, Direction, PayChannel, prisma } from "@smetko/db";
 import { type CashExpenseInput, currentPeriod } from "@smetko/shared";
 import { writeAudit } from "@/lib/audit";
 import { assertPeriodOpen } from "@/lib/period-guard";
+import { lockCashLedger } from "@/lib/locks";
 
 /**
  * W6 — mobile cash expense (Master Plan §W6). Atomic: Expense + CashLedgerEntry(OUT) + photo,
@@ -19,6 +20,7 @@ export async function recordCashExpense(
   await prisma.$transaction(async (tx) => {
     await tx.period.upsert({ where: { id: period }, update: {}, create: { id: period } });
     await assertPeriodOpen(tx, period); // B9
+    await lockCashLedger(tx); // B3 — serialize the balance check-then-act against concurrent cash-out
 
     const [inAgg, outAgg] = await Promise.all([
       tx.cashLedgerEntry.aggregate({ _sum: { amount: true }, where: { direction: Direction.IN } }),

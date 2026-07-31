@@ -568,53 +568,68 @@ export async function runMatching(userId: string): Promise<number> {
       }
     }
 
-    await prisma.$transaction(async (tx) => {
-      const adAccount = r.metaAccountId
-        ? await tx.adAccount.findUnique({ where: { metaAccountId: r.metaAccountId } })
-        : null;
-      const clientId = adAccount?.clientId ?? null;
+    // Concurrency: runMatching runs from three entry points (statement ingest, receipt ingest,
+    // manual Rematch). Claim the line and the receipt ATOMICALLY inside the tx — a stale read from
+    // outside must never let two runs both book the same line. On a lost race we skip, not crash;
+    // any unexpected error is logged and the batch continues (one bad receipt ≠ failed import).
+    try {
+      const booked = await prisma.$transaction(async (tx) => {
+        const claim = await tx.statementLine.updateMany({
+          where: { id: line.id, processed: false },
+          data: { processed: true, direction: Direction.OUT },
+        });
+        if (claim.count === 0) return false; // another run already claimed this line
+        const fresh = await tx.adSpendReceipt.findUnique({ where: { id: r.id } });
+        if (!fresh || fresh.matchStatus !== MatchStatus.UNMATCHED) return false; // receipt taken
 
-      const expense = await tx.expense.create({
-        data: {
-          category: "ADS",
-          vendor: "Meta",
-          amount: line.amount, // MKD from the statement, 1:1 (D3)
-          date: line.date,
-          paymentChannel: PayChannel.CARD,
-          clientId,
-          isBillable: clientId != null, // B2: billable ADS needs a client
-          attachmentUrl: r.attachmentUrl, // the Meta PDF — legal document
-          statementLineId: line.id,
-          adSpendReceiptId: r.id,
-        },
+        const adAccount = r.metaAccountId
+          ? await tx.adAccount.findUnique({ where: { metaAccountId: r.metaAccountId } })
+          : null;
+        const clientId = adAccount?.clientId ?? null;
+
+        const expense = await tx.expense.create({
+          data: {
+            category: "ADS",
+            vendor: "Meta",
+            amount: line.amount, // MKD from the statement, 1:1 (D3)
+            date: line.date,
+            paymentChannel: PayChannel.CARD,
+            clientId,
+            isBillable: clientId != null, // B2: billable ADS needs a client
+            attachmentUrl: r.attachmentUrl, // the Meta PDF — legal document
+            statementLineId: line.id,
+            adSpendReceiptId: r.id,
+          },
+        });
+        await tx.adSpendReceipt.update({
+          where: { id: r.id },
+          data: { matchStatus: MatchStatus.AUTO_MATCHED, statementLineId: line.id },
+        });
+        await tx.statementLine.update({
+          where: { id: line.id },
+          data: { linkedType: "Expense", linkedId: expense.id },
+        });
+        await writeAudit(tx, {
+          entity: "AdSpendReceipt",
+          entityId: r.id,
+          action: "match.auto",
+          diff: {
+            referenceNumber: r.referenceNumber,
+            amountMkd: line.amount,
+            clientId,
+            rateSanityOk,
+          },
+          userId,
+        });
+        return true;
       });
-      await tx.adSpendReceipt.update({
-        where: { id: r.id },
-        data: { matchStatus: MatchStatus.AUTO_MATCHED, statementLineId: line.id },
-      });
-      await tx.statementLine.update({
-        where: { id: line.id },
-        data: {
-          processed: true,
-          direction: Direction.OUT,
-          linkedType: "Expense",
-          linkedId: expense.id,
-        },
-      });
-      await writeAudit(tx, {
-        entity: "AdSpendReceipt",
-        entityId: r.id,
-        action: "match.auto",
-        diff: {
-          referenceNumber: r.referenceNumber,
-          amountMkd: line.amount,
-          clientId,
-          rateSanityOk,
-        },
-        userId,
-      });
-    });
-    matched++;
+      if (booked) matched++;
+    } catch (e) {
+      log.warn(
+        { event: "match.error", referenceNumber: r.referenceNumber, err: String(e) },
+        "Спарувањето на еден receipt не успеа — продолжувам со останатите",
+      );
+    }
   }
   return matched;
 }

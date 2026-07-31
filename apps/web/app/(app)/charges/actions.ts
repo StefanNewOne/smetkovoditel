@@ -75,7 +75,7 @@ export async function deleteChargeAction(chargeId: string): Promise<SimpleResult
 export async function approveAllDrafts(
   period: string,
   channel?: "INVOICE" | "CASH",
-): Promise<{ ok: true; approved: number }> {
+): Promise<{ ok: true; approved: number; failed: number; firstError?: string }> {
   const drafts = await prisma.charge.findMany({
     where: {
       period,
@@ -88,12 +88,20 @@ export async function approveAllDrafts(
     orderBy: { id: "asc" },
   });
   let approved = 0;
+  let failed = 0;
+  let firstError: string | undefined;
   for (const d of drafts) {
     const r = await approveCharge(d.id);
-    if (r.ok) approved++;
+    if (r.ok) {
+      approved++;
+    } else {
+      // Don't swallow a partial batch failure — surface the count and the first reason (SM-110).
+      failed++;
+      firstError ??= r.error;
+    }
   }
   revalidatePath("/charges");
-  return { ok: true, approved };
+  return { ok: true, approved, failed, firstError };
 }
 
 /** SM-89 — НАПЛАТА КЕШ: record a cash payment against a cash obligation (W3, fiscal number D6). */
@@ -160,7 +168,15 @@ export async function creditNote(
       if (!original || original.kind !== ChargeKind.INVOICE || !original.invoiceNumber) {
         throw new Error("Одобрение може само врз издадена фактура.");
       }
-      if (amount > original.total) throw new Error("Износот надминува оригиналната фактура.");
+      // Cap cumulatively: Σ(existing credit notes) + this one must not exceed the invoice (SM-110).
+      const prior = await tx.charge.aggregate({
+        _sum: { total: true },
+        where: { kind: ChargeKind.CREDIT_NOTE, relatedChargeId: original.id },
+      });
+      const alreadyCredited = prior._sum.total ?? 0;
+      if (alreadyCredited + amount > original.total) {
+        throw new Error("Износот (со претходни одобренија) ја надминува оригиналната фактура.");
+      }
 
       const cn = await tx.charge.create({
         data: {

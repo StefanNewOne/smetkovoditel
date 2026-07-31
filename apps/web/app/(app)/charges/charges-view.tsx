@@ -145,7 +145,11 @@ export function ChargesView({
         onApproveAll={() =>
           run(async () => {
             const r = await approveAllDrafts(period, "INVOICE");
-            setMsg(`Издадени ${r.approved} фактури.`);
+            setMsg(
+              r.failed
+                ? `Издадени ${r.approved}, ${r.failed} неуспешни: ${r.firstError ?? ""}`
+                : `Издадени ${r.approved} фактури.`,
+            );
           })
         }
       />
@@ -164,7 +168,11 @@ export function ChargesView({
         onApproveAll={() =>
           run(async () => {
             const r = await approveAllDrafts(period, "CASH");
-            setMsg(`Одобрени ${r.approved} кеш обврски.`);
+            setMsg(
+              r.failed
+                ? `Одобрени ${r.approved}, ${r.failed} неуспешни: ${r.firstError ?? ""}`
+                : `Одобрени ${r.approved} кеш обврски.`,
+            );
           })
         }
       />

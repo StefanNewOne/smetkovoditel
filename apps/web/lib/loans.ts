@@ -91,6 +91,7 @@ export async function deleteLoanEntry(id: string, userId: string): Promise<void>
   await prisma.$transaction(async (tx) => {
     const loan = await tx.loanEntry.findUnique({ where: { id } });
     if (!loan) throw new Error("Записот не постои.");
+    await assertPeriodOpen(tx, loan.periodId); // B9 — no deleting a loan in a closed period
     if (loan.statementLineId) {
       await tx.statementLine.update({
         where: { id: loan.statementLineId },

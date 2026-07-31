@@ -1,6 +1,8 @@
 import "server-only";
 import { MatchStatus, PayChannel, prisma } from "@smetko/db";
+import { currentPeriod } from "@smetko/shared";
 import { writeAudit } from "@/lib/audit";
+import { assertPeriodOpen } from "@/lib/period-guard";
 
 /**
  * META Реклами (SM-94..97) — attribution + resolution of Meta ad spend flowing through the NLB card.
@@ -22,6 +24,15 @@ export async function mapAdAccount(metaAccountId: string, clientId: string | nul
     });
     const receiptIds = receipts.map((r) => r.id);
     if (receiptIds.length) {
+      // B9: re-attribution rewrites which client an expense is billed to — never touch a closed
+      // period. Block if any affected ADS expense lives in a CLOSED month.
+      const affected = await tx.expense.findMany({
+        where: { category: "ADS", adSpendReceiptId: { in: receiptIds } },
+        select: { date: true },
+      });
+      for (const p of new Set(affected.map((e) => currentPeriod(e.date)))) {
+        await assertPeriodOpen(tx, p);
+      }
       await tx.expense.updateMany({
         where: { category: "ADS", adSpendReceiptId: { in: receiptIds } },
         data: { clientId, isBillable: clientId != null },
@@ -43,6 +54,7 @@ export async function bookFacebkLine(lineId: string, clientId: string | null, us
   await prisma.$transaction(async (tx) => {
     const line = await tx.statementLine.findUnique({ where: { id: lineId } });
     if (!line || line.processed) throw new Error("Линијата не постои или е веќе решена.");
+    await assertPeriodOpen(tx, currentPeriod(line.date)); // B9
     const exp = await tx.expense.create({
       data: {
         category: "ADS",
@@ -96,6 +108,7 @@ export async function manualMatchReceipt(receiptId: string, lineId: string, user
       throw new Error("Receipt не е за спарување.");
     const line = await tx.statementLine.findUnique({ where: { id: lineId } });
     if (!line || line.processed) throw new Error("Линијата не постои или е веќе решена.");
+    await assertPeriodOpen(tx, currentPeriod(line.date)); // B9
 
     const adAccount = r.metaAccountId
       ? await tx.adAccount.findUnique({ where: { metaAccountId: r.metaAccountId } })

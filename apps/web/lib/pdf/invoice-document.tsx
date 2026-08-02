@@ -55,8 +55,17 @@ const s = StyleSheet.create({
   logoWord: { fontSize: 13, fontWeight: 800, letterSpacing: 2 },
   issuerName: { fontWeight: 700 },
   issuerLine: { fontSize: 9, color: muted },
-  invoiceTitle: { fontSize: 20, fontWeight: 800, textAlign: "right" },
-  invoiceMeta: { fontSize: 9, color: muted, textAlign: "right" },
+  // Explicit lineHeight so the large title's line box is sized from its own fontSize (not the
+  // inherited page lineHeight, which sized it from the 10px base and let the glyphs overflow onto
+  // the "Бр." line). marginBottom guarantees clear separation from the invoice number.
+  invoiceTitle: {
+    fontSize: 20,
+    fontWeight: 800,
+    textAlign: "right",
+    lineHeight: 1.3,
+    marginBottom: 4,
+  },
+  invoiceMeta: { fontSize: 9, color: muted, textAlign: "right", lineHeight: 1.4 },
   recipientBox: {
     borderWidth: 1,
     borderColor: "#e7ecf3",

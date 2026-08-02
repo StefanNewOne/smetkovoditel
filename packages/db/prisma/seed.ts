@@ -39,6 +39,25 @@ async function main() {
     },
   });
 
+  // Company profile (SM-113, D1) — issuer identity for invoices, from the real Word invoices.
+  await prisma.companyProfile.upsert({
+    where: { id: "default" },
+    update: {},
+    create: {
+      id: "default",
+      name: "АЛМА ДИЗАЈН ДООЕЛ Скопје",
+      address: "ул. Илинденска бр. 97, Скопје",
+      phone: "078 243 197",
+      email: "almadizajn@gmail.com",
+      taxId: "4032023558371",
+      bankName: "НЛБ Банка АД Скопје",
+      account: "210-0768360001-38",
+      director: "Маја Кекиќ",
+      invoiceFooter:
+        "По истекот на рокот за плаќање се пресметува затезна камата според банкарските услови. Дополнителни рекламации не се прифаќаат.",
+    },
+  });
+
   // Expense categories (SM-99) — must exist before any VendorRule/Expense references them (FK).
   for (const c of CATEGORY_SEED) {
     await prisma.category.upsert({

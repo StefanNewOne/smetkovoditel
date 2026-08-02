@@ -143,6 +143,7 @@ enum ParseStatus {
 model Client {
   id              String                  @id @default(cuid())
   name            String
+  legalName       String? // полн правен назив за фактура (пр. „ДТУ СТАФФ 2014 ДОО"); fallback на name
   taxId           String? // ЕДБ — required за INVOICE (app-валидација)
   address         String?
   contactEmail    String?
@@ -545,6 +546,22 @@ model User {
   email        String @unique
   role         String
   passwordHash String // app-managed session auth (ADR-001 A3)
+}
+
+// SM-113 — issuer identity + invoice settings (Master Plan D1: entity data lives in config, never
+// hardcoded in business logic). Singleton row (id = "default"). Seeded with the АЛМА ДИЗАЈН data.
+model CompanyProfile {
+  id            String   @id @default("default")
+  name          String
+  address       String
+  phone         String?
+  email         String?
+  taxId         String // ЕДБ на издавачот
+  bankName      String
+  account       String // жиро-сметка
+  director      String // управител (потпис)
+  invoiceFooter String // клаузули на дното на фактурата
+  updatedAt     DateTime @updatedAt
 }
 
 // SM-111 — durable, acknowledgeable alarm record for import/worker integrity failures (Master Plan

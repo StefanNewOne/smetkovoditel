@@ -11,6 +11,9 @@ const TEST_DATABASE_URL =
   "postgresql://smetko:smetko@localhost:5434/smetko_test?schema=public";
 
 export default defineConfig({
+  // Use the automatic JSX runtime so .tsx modules (e.g. the invoice PDF) render without an explicit
+  // React import — matches how Next builds the app.
+  esbuild: { jsx: "automatic" },
   test: {
     include: ["test/**/*.integration.test.ts", "lib/**/*.integration.test.ts"],
     globalSetup: ["./test/setup/global-setup.ts"],

@@ -4,29 +4,36 @@ import { formatMKD } from "@smetko/shared";
 export interface InvoiceLine {
   description: string;
   subDescription?: string; // sourceRefs traceability (§7)
-  base: number; // дени
-  vat: number; // дени
-  amount: number; // дени (base + vat)
+  quantity: number;
+  unitPrice: number; // дени
+  base: number; // дени (= quantity * unitPrice)
+}
+
+export interface InvoiceIssuer {
+  name: string;
+  address: string;
+  phone: string;
+  email: string;
+  taxId: string;
+  bankName: string;
+  account: string;
+  director: string;
+  invoiceFooter: string;
 }
 
 export interface InvoiceData {
   invoiceNumber: string;
   issueDate: string; // formatted dd.MM.yyyy
   dueDate: string;
+  place: string; // место на издавање (Скопје)
+  issuer: InvoiceIssuer;
   client: { name: string; taxId: string | null; address: string | null };
   lines: InvoiceLine[];
   subtotal: number;
   vatAmount: number;
+  vatRatePct: number; // 18 (derived from the charge — never a hardcoded label)
   total: number;
 }
-
-// АЛМА ДИЗАЈН ДООЕЛ Скопје (D1, §7.1).
-const ISSUER = {
-  name: "АЛМА ДИЗАЈН ДООЕЛ Скопје",
-  taxId: "4032023558371",
-  account: "210-0768360001-38",
-  bank: "НЛБ Банка АД Скопје",
-};
 
 const ink = "#1a2333";
 const muted = "#5b6878";
@@ -46,6 +53,7 @@ const s = StyleSheet.create({
     marginRight: 5,
   },
   logoWord: { fontSize: 13, fontWeight: 800, letterSpacing: 2 },
+  issuerName: { fontWeight: 700 },
   issuerLine: { fontSize: 9, color: muted },
   invoiceTitle: { fontSize: 20, fontWeight: 800, textAlign: "right" },
   invoiceMeta: { fontSize: 9, color: muted, textAlign: "right" },
@@ -78,8 +86,9 @@ const s = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#f2f5f9",
   },
-  cDesc: { width: "52%" },
-  cNum: { width: "16%", textAlign: "right" },
+  cDesc: { width: "46%" },
+  cQty: { width: "12%", textAlign: "right" },
+  cNum: { width: "21%", textAlign: "right" },
   subDesc: { fontSize: 8, color: muted, marginTop: 1 },
   totals: { marginTop: 12, marginLeft: "auto", width: "45%" },
   totalRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 2 },
@@ -92,16 +101,20 @@ const s = StyleSheet.create({
     paddingTop: 5,
   },
   grandLabel: { fontSize: 12, fontWeight: 800 },
-  footer: { marginTop: 34 },
+  footer: { marginTop: 30 },
   refNote: { fontSize: 10, fontWeight: 700 },
-  sign: { marginTop: 40, flexDirection: "row", justifyContent: "flex-end" },
+  clauses: { fontSize: 8, color: muted, marginTop: 6 },
+  placeDate: { fontSize: 9, color: muted, marginTop: 16 },
+  sign: { marginTop: 28, flexDirection: "row", justifyContent: "flex-end" },
+  signBox: { width: 200, alignItems: "center" },
+  signLabel: { fontSize: 9, color: muted, marginBottom: 26 },
   signLine: {
-    width: 180,
+    width: 200,
     borderTopWidth: 1,
     borderTopColor: muted,
     paddingTop: 4,
     fontSize: 9,
-    color: muted,
+    fontWeight: 700,
     textAlign: "center",
   },
 });
@@ -109,6 +122,8 @@ const s = StyleSheet.create({
 const den = (v: number) => `${formatMKD(v)} ден`;
 
 export function InvoiceDocument({ data }: { data: InvoiceData }) {
+  const { issuer } = data;
+  const contact = [issuer.phone, issuer.email].filter(Boolean).join(" · ");
   return (
     <Document>
       <Page size="A4" style={s.page}>
@@ -118,10 +133,13 @@ export function InvoiceDocument({ data }: { data: InvoiceData }) {
               <Text style={s.logoBox}>GO</Text>
               <Text style={s.logoWord}>DIGITAL</Text>
             </View>
-            <Text style={{ fontWeight: 700 }}>{ISSUER.name}</Text>
-            <Text style={s.issuerLine}>Даночен број: {ISSUER.taxId}</Text>
-            <Text style={s.issuerLine}>Жиро сметка: {ISSUER.account}</Text>
-            <Text style={s.issuerLine}>{ISSUER.bank}</Text>
+            <Text style={s.issuerName}>{issuer.name}</Text>
+            <Text style={s.issuerLine}>{issuer.address}</Text>
+            {contact ? <Text style={s.issuerLine}>{contact}</Text> : null}
+            <Text style={s.issuerLine}>Даночен број: {issuer.taxId}</Text>
+            <Text style={s.issuerLine}>
+              {issuer.bankName} · {issuer.account}
+            </Text>
           </View>
           <View>
             <Text style={s.invoiceTitle}>ФАКТУРА</Text>
@@ -134,14 +152,18 @@ export function InvoiceDocument({ data }: { data: InvoiceData }) {
         <View style={s.recipientBox}>
           <Text style={s.microLabel}>Примач</Text>
           <Text style={{ fontWeight: 700 }}>{data.client.name}</Text>
-          {data.client.taxId ? <Text style={s.issuerLine}>ЕДБ: {data.client.taxId}</Text> : null}
+          {data.client.taxId ? (
+            <Text style={s.issuerLine}>ЕДБ: {data.client.taxId}</Text>
+          ) : (
+            <Text style={[s.issuerLine, { color: "#c2483f" }]}>ЕДБ: — (недостасува)</Text>
+          )}
           {data.client.address ? <Text style={s.issuerLine}>{data.client.address}</Text> : null}
         </View>
 
         <View style={s.tHead}>
           <Text style={[s.tHeadCell, s.cDesc]}>Опис</Text>
-          <Text style={[s.tHeadCell, s.cNum]}>Основица</Text>
-          <Text style={[s.tHeadCell, s.cNum]}>ДДВ 18%</Text>
+          <Text style={[s.tHeadCell, s.cQty]}>Количина</Text>
+          <Text style={[s.tHeadCell, s.cNum]}>Единечна цена</Text>
           <Text style={[s.tHeadCell, s.cNum]}>Износ</Text>
         </View>
 
@@ -151,9 +173,9 @@ export function InvoiceDocument({ data }: { data: InvoiceData }) {
               <Text>{l.description}</Text>
               {l.subDescription ? <Text style={s.subDesc}>{l.subDescription}</Text> : null}
             </View>
+            <Text style={s.cQty}>{l.quantity}</Text>
+            <Text style={s.cNum}>{den(l.unitPrice)}</Text>
             <Text style={s.cNum}>{den(l.base)}</Text>
-            <Text style={s.cNum}>{l.vat > 0 ? den(l.vat) : "—"}</Text>
-            <Text style={s.cNum}>{den(l.amount)}</Text>
           </View>
         ))}
 
@@ -163,11 +185,11 @@ export function InvoiceDocument({ data }: { data: InvoiceData }) {
             <Text>{den(data.subtotal)}</Text>
           </View>
           <View style={s.totalRow}>
-            <Text style={{ color: muted }}>ДДВ 18%</Text>
+            <Text style={{ color: muted }}>ДДВ {data.vatRatePct}%</Text>
             <Text>{den(data.vatAmount)}</Text>
           </View>
           <View style={s.grandRow}>
-            <Text style={s.grandLabel}>ВКУПНО</Text>
+            <Text style={s.grandLabel}>За плаќање</Text>
             <Text style={s.grandLabel}>{den(data.total)}</Text>
           </View>
         </View>
@@ -176,10 +198,17 @@ export function InvoiceDocument({ data }: { data: InvoiceData }) {
           <Text style={s.refNote}>
             При плаќање наведете повикување на број: {data.invoiceNumber}
           </Text>
+          {issuer.invoiceFooter ? <Text style={s.clauses}>{issuer.invoiceFooter}</Text> : null}
+          <Text style={s.placeDate}>
+            {data.place}, {data.issueDate}
+          </Text>
         </View>
 
         <View style={s.sign}>
-          <Text style={s.signLine}>Потпис и печат</Text>
+          <View style={s.signBox}>
+            <Text style={s.signLabel}>Управител</Text>
+            <Text style={s.signLine}>{issuer.director}</Text>
+          </View>
         </View>
       </Page>
     </Document>

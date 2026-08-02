@@ -15,6 +15,7 @@ const zAdAccountInput = z.object({
  */
 export const zCreateClient = z.object({
   name: z.string().trim().min(1, "Внеси име на клиент"),
+  legalName: z.string().trim().optional(), // полн правен назив за фактура (SM-113)
   paymentChannel: zPaymentChannel,
   taxId: z.string().trim().optional(),
   address: z.string().trim().optional(),
@@ -129,3 +130,26 @@ export const zChangePackage = z.object({
   effectiveFrom: z.string().min(1), // ISO date; the first of a month typically
 });
 export type ChangePackageInput = z.infer<typeof zChangePackage>;
+
+/** SM-113 — edit a client's legal invoice details (легално име, ЕДБ, адреса). */
+export const zUpdateClientDetails = z.object({
+  clientId: z.string().min(1),
+  legalName: z.string().trim().optional(),
+  taxId: z.string().trim().optional(),
+  address: z.string().trim().optional(),
+});
+export type UpdateClientDetailsInput = z.infer<typeof zUpdateClientDetails>;
+
+/** SM-113 — issuer identity + invoice settings (Company profile, Подесувања). */
+export const zCompanyProfile = z.object({
+  name: z.string().trim().min(1, "Внеси назив"),
+  address: z.string().trim().min(1, "Внеси адреса"),
+  phone: z.string().trim().optional(),
+  email: z.union([z.string().email("Невалидна е-пошта"), z.literal("")]).optional(),
+  taxId: z.string().trim().min(1, "Внеси ЕДБ"),
+  bankName: z.string().trim().min(1, "Внеси банка"),
+  account: z.string().trim().min(1, "Внеси жиро-сметка"),
+  director: z.string().trim().min(1, "Внеси управител"),
+  invoiceFooter: z.string().trim().default(""),
+});
+export type CompanyProfileInput = z.infer<typeof zCompanyProfile>;

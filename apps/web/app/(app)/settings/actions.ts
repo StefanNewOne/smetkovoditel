@@ -3,7 +3,12 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@smetko/db";
-import { type CreateEmployeeInput, zCreateEmployee } from "@smetko/shared";
+import {
+  type CompanyProfileInput,
+  type CreateEmployeeInput,
+  zCompanyProfile,
+  zCreateEmployee,
+} from "@smetko/shared";
 import { writeAudit } from "@/lib/audit";
 import { categoryExists } from "@/lib/expenses";
 import { requireWriter } from "@/lib/rbac";
@@ -135,6 +140,32 @@ export async function createEmployeeAction(input: CreateEmployeeInput): Promise<
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Невалидни податоци." };
   await createEmployee(parsed.data, user.id);
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+/** SM-113 — update the company profile (issuer identity for invoices). Singleton "default" row. */
+export async function updateCompanyProfileAction(input: CompanyProfileInput): Promise<Result> {
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  const parsed = zCompanyProfile.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Невалидни податоци." };
+  const d = parsed.data;
+  await prisma.$transaction(async (tx) => {
+    await tx.companyProfile.upsert({
+      where: { id: "default" },
+      update: { ...d, phone: d.phone || null, email: d.email || null },
+      create: { id: "default", ...d, phone: d.phone || null, email: d.email || null },
+    });
+    await writeAudit(tx, {
+      entity: "CompanyProfile",
+      entityId: "default",
+      action: "update",
+      diff: { name: d.name, taxId: d.taxId, account: d.account },
+      userId: auth.user.id,
+    });
+  });
   revalidatePath("/settings");
   return { ok: true };
 }

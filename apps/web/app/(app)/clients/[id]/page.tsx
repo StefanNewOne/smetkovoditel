@@ -9,6 +9,7 @@ import { Avatar, ChannelBadge, StatusBadge } from "@/components/ui/badges";
 import { ClientAdminActions } from "./client-admin-actions";
 import { GiroAccounts } from "./giro-accounts";
 import { ClientContract } from "./client-contract";
+import { ClientLegalDetails } from "./client-legal-details";
 
 function fmtDate(d: Date | null): string {
   return d
@@ -115,6 +116,12 @@ export default async function ClientProfile({ params }: { params: Promise<{ id: 
 
         {/* Right column */}
         <div className="flex flex-col gap-4">
+          <ClientLegalDetails
+            clientId={client.id}
+            legalName={client.legalName}
+            taxId={client.taxId}
+            address={client.address}
+          />
           <ClientContract
             clientId={client.id}
             contractUrl={client.contractUrl}

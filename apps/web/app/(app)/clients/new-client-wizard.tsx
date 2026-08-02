@@ -38,6 +38,7 @@ export function NewClientWizard() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [channel, setChannel] = useState<PaymentChannelValue | null>(null);
+  const [legalName, setLegalName] = useState("");
   const [taxId, setTaxId] = useState("");
   const [amountRaw, setAmountRaw] = useState("");
   const [cycle, setCycle] = useState<"MONTHLY" | "QUARTERLY">("MONTHLY");
@@ -57,6 +58,7 @@ export function NewClientWizard() {
     setEmail("");
     setPhone("");
     setChannel(null);
+    setLegalName("");
     setTaxId("");
     setAmountRaw("");
     setCycle("MONTHLY");
@@ -84,6 +86,7 @@ export function NewClientWizard() {
     startTransition(async () => {
       const res = await createClient({
         name: name.trim(),
+        legalName: legalName.trim() || undefined,
         paymentChannel: channel!,
         taxId: taxId.trim() || undefined,
         contactEmail: email.trim() || undefined,
@@ -152,6 +155,14 @@ export function NewClientWizard() {
                     className={inputCls}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
+                  />
+                </Field>
+                <Field label="Правно име (за фактура, опционо)">
+                  <input
+                    className={inputCls}
+                    value={legalName}
+                    placeholder='пр. „ДТУ СТАФФ 2014 ДОО"'
+                    onChange={(e) => setLegalName(e.target.value)}
                   />
                 </Field>
                 <Field label="Е-пошта (опционо)">

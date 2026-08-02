@@ -5,8 +5,10 @@ import { BillingMode, ClientStatus, LineType, prisma } from "@smetko/db";
 import {
   type CreateClientInput,
   type ChangePackageInput,
+  type UpdateClientDetailsInput,
   zChangePackage,
   zCreateClient,
+  zUpdateClientDetails,
 } from "@smetko/shared";
 import { requireWriter } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
@@ -188,6 +190,7 @@ export async function createClient(input: CreateClientInput): Promise<ActionResu
     const client = await tx.client.create({
       data: {
         name: d.name,
+        legalName: d.legalName || null,
         taxId: d.taxId || null,
         address: d.address || null,
         contactEmail: d.contactEmail || null,
@@ -259,6 +262,40 @@ export async function createClient(input: CreateClientInput): Promise<ActionResu
 
   revalidatePath("/clients");
   return { ok: true, id };
+}
+
+/** SM-113 — edit a client's legal invoice details (правно име, ЕДБ, адреса). */
+export async function updateClientDetails(input: UpdateClientDetailsInput): Promise<ActionResult> {
+  const auth = await requireWriter();
+  if (!auth.ok) return { ok: false, error: auth.error };
+  const parsed = zUpdateClientDetails.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Невалидни податоци." };
+  const d = parsed.data;
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.client.update({
+        where: { id: d.clientId },
+        data: {
+          legalName: d.legalName || null,
+          taxId: d.taxId || null,
+          address: d.address || null,
+        },
+      });
+      await writeAudit(tx, {
+        entity: "Client",
+        entityId: d.clientId,
+        action: "details.update",
+        diff: { legalName: d.legalName ?? null, taxId: d.taxId ?? null },
+        userId: auth.user.id,
+      });
+    });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Не успеа." };
+  }
+  revalidatePath(`/clients/${d.clientId}`);
+  revalidatePath("/clients");
+  return { ok: true, id: d.clientId };
 }
 
 /** Change a client's monthly package = close the current version and open a new one (B4). */

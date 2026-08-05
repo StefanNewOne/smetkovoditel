@@ -30,6 +30,11 @@ export interface OrphanReceiptRow {
   accountName: string;
   reference: string;
   usd: string;
+  usdCents: number; // raw — for the USD→МКД preview
+  cardLast4: string;
+  clientId: string | null;
+  clientName: string | null; // mapped client (billable target), or null
+  isOtherCard: boolean; // true = card produces no NLB statement → book via conversion (SM-114)
   date: string;
   attachmentUrl: string | null;
 }
@@ -52,30 +57,38 @@ export async function getMetaOverview(from?: string, to?: string) {
         }
       : {};
 
-  const [grouped, clients, accounts, facebk, orphans, allReceiptAccounts] = await Promise.all([
-    prisma.expense.groupBy({
-      by: ["clientId"],
-      where: { category: "ADS", ...dateFilter },
-      _sum: { amount: true },
-      _count: true,
-    }),
-    prisma.client.findMany({
-      select: { id: true, name: true, status: true },
-      orderBy: { name: "asc" },
-    }),
-    prisma.adAccount.findMany({ include: { client: { select: { name: true } } } }),
-    prisma.statementLine.findMany({
-      where: { processed: false, classifiedAs: "META_ADS", direction: "OUT" },
-      orderBy: { date: "asc" },
-      include: { import: { select: { statementNumber: true } } },
-    }),
-    prisma.adSpendReceipt.findMany({
-      where: { matchStatus: "UNMATCHED" },
-      orderBy: { invoiceDate: "desc" },
-    }),
-    // Every ad account seen in receipts — so a NEW/unmapped account still shows up to be mapped.
-    prisma.adSpendReceipt.findMany({ select: { metaAccountId: true, accountName: true } }),
-  ]);
+  const [grouped, clients, accounts, facebk, orphans, allReceiptAccounts, statementCardRows] =
+    await Promise.all([
+      prisma.expense.groupBy({
+        by: ["clientId"],
+        where: { category: "ADS", ...dateFilter },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      prisma.client.findMany({
+        select: { id: true, name: true, status: true },
+        orderBy: { name: "asc" },
+      }),
+      prisma.adAccount.findMany({ include: { client: { select: { name: true } } } }),
+      prisma.statementLine.findMany({
+        where: { processed: false, classifiedAs: "META_ADS", direction: "OUT" },
+        orderBy: { date: "asc" },
+        include: { import: { select: { statementNumber: true } } },
+      }),
+      prisma.adSpendReceipt.findMany({
+        where: { matchStatus: "UNMATCHED" },
+        orderBy: { invoiceDate: "desc" },
+      }),
+      // Every ad account seen in receipts — so a NEW/unmapped account still shows up to be mapped.
+      prisma.adSpendReceipt.findMany({ select: { metaAccountId: true, accountName: true } }),
+      // Cards that produce NLB statements (any auto-matched receipt) — the rest are "other" cards (SM-114).
+      prisma.adSpendReceipt.findMany({
+        where: { matchStatus: "AUTO_MATCHED" },
+        select: { cardLast4: true },
+        distinct: ["cardLast4"],
+      }),
+    ]);
+  const statementCards = new Set(statementCardRows.map((a) => a.cardLast4));
 
   const nameById = new Map(clients.map((c) => [c.id, c.name] as const));
   const spend: SpendRow[] = grouped
@@ -123,14 +136,22 @@ export async function getMetaOverview(from?: string, to?: string) {
     statementNumber: l.import.statementNumber,
   }));
 
-  const orphanReceipts: OrphanReceiptRow[] = orphans.map((r) => ({
-    id: r.id,
-    accountName: r.accountName,
-    reference: r.referenceNumber,
-    usd: `$${(r.amountUsd / 100).toFixed(2)}`,
-    date: r.invoiceDate ? dt(r.invoiceDate) : "—",
-    attachmentUrl: r.attachmentUrl,
-  }));
+  const orphanReceipts: OrphanReceiptRow[] = orphans.map((r) => {
+    const mapped = r.metaAccountId ? mappedByAcc.get(r.metaAccountId) : undefined;
+    return {
+      id: r.id,
+      accountName: r.accountName,
+      reference: r.referenceNumber,
+      usd: `$${(r.amountUsd / 100).toFixed(2)}`,
+      usdCents: r.amountUsd,
+      cardLast4: r.cardLast4,
+      clientId: mapped?.clientId ?? null,
+      clientName: mapped?.client?.name ?? null,
+      isOtherCard: !statementCards.has(r.cardLast4),
+      date: r.invoiceDate ? dt(r.invoiceDate) : "—",
+      attachmentUrl: r.attachmentUrl,
+    };
+  });
 
   const clientOptions: ClientOption[] = clients.map((c) => ({
     id: c.id,

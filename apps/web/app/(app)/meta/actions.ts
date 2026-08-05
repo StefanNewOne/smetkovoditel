@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { requireWriter } from "@/lib/rbac";
 import { ignoreStatementLine } from "@/lib/workflows/w2";
 import {
+  bookAllOtherCardReceipts,
   bookFacebkLine,
+  bookOtherCardReceipt,
   deleteReceipt,
   manualMatchReceipt,
   mapAdAccount,
@@ -62,4 +64,32 @@ export async function matchReceiptAction(receiptId: string, lineId: string): Pro
   const auth = await requireWriter();
   if (!auth.ok) return auth;
   return wrap(() => manualMatchReceipt(receiptId, lineId, auth.user.id), "Спарувањето не успеа.");
+}
+
+/** SM-114 — book an other-card receipt as an ADS expense, USD converted to МКД at the given rate. */
+export async function bookOtherCardAction(receiptId: string, rate: number): Promise<Result> {
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  if (!Number.isFinite(rate) || rate <= 0)
+    return { ok: false, error: "Внеси валиден USD→МКД курс." };
+  return wrap(() => bookOtherCardReceipt(receiptId, rate, auth.user.id), "Книжењето не успеа.");
+}
+
+/** SM-114 — book ALL other-card unmatched receipts at the given rate. */
+export async function bookAllOtherCardAction(
+  rate: number,
+): Promise<{ ok: true; count: number; totalMkd: number } | { ok: false; error: string }> {
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  if (!Number.isFinite(rate) || rate <= 0)
+    return { ok: false, error: "Внеси валиден USD→МКД курс." };
+  try {
+    const res = await bookAllOtherCardReceipts(rate, auth.user.id);
+    revalidatePath("/meta");
+    revalidatePath("/import");
+    revalidatePath("/expenses");
+    return { ok: true, ...res };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Книжењето не успеа." };
+  }
 }

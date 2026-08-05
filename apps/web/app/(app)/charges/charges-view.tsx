@@ -37,13 +37,21 @@ function safeDeni(raw: string): number {
 
 export function ChargesView({
   period,
+  year,
   charges,
+  clients,
+  clientId,
+  clientName,
   blockers,
   closed,
   unmatchedPayments,
 }: {
   period: string;
+  year: string;
   charges: ChargeRow[];
+  clients: { id: string; name: string }[];
+  clientId?: string;
+  clientName?: string;
   blockers: CloseBlocker[];
   closed: boolean;
   unmatchedPayments: PaymentOption[];
@@ -98,33 +106,61 @@ export function ChargesView({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1 rounded-md border border-border bg-surface">
-          <button
-            onClick={() => go(shiftPeriod(period, -1))}
-            className="px-2 py-1.5 text-muted hover:text-ink"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <span className="min-w-[84px] text-center text-[13px] font-bold text-ink">{period}</span>
-          <button
-            onClick={() => go(shiftPeriod(period, 1))}
-            className="px-2 py-1.5 text-muted hover:text-ink"
-          >
-            <ChevronRight size={16} />
-          </button>
-        </div>
-        {closed && (
+        {clientId ? (
+          <span className="rounded-md bg-accent-50 px-3 py-1.5 text-[13px] font-bold text-accent">
+            {clientName} · сите задолжувања {year}
+          </span>
+        ) : (
+          <div className="flex items-center gap-1 rounded-md border border-border bg-surface">
+            <button
+              onClick={() => go(shiftPeriod(period, -1))}
+              className="px-2 py-1.5 text-muted hover:text-ink"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span className="min-w-[84px] text-center text-[13px] font-bold text-ink">
+              {period}
+            </span>
+            <button
+              onClick={() => go(shiftPeriod(period, 1))}
+              className="px-2 py-1.5 text-muted hover:text-ink"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        )}
+
+        <select
+          value={clientId ?? ""}
+          onChange={(e) =>
+            router.push(
+              e.target.value ? `/charges?client=${e.target.value}` : `/charges?period=${period}`,
+            )
+          }
+          className="rounded-md border border-border bg-surface px-2.5 py-2 text-[12.5px] font-semibold text-ink"
+        >
+          <option value="">Сите клиенти (по месец)</option>
+          {clients.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+
+        {!clientId && closed && (
           <span className="flex items-center gap-1 rounded-md bg-ink px-3 py-1.5 text-[12px] font-bold text-white">
             <Lock size={12} /> Период ЗАТВОРЕН (B9)
           </span>
         )}
-        <button
-          onClick={() => setCloseOpen(true)}
-          disabled={closed}
-          className="ml-auto rounded-md border border-border px-3.5 py-2 text-[12px] font-bold text-muted hover:bg-inset disabled:opacity-40"
-        >
-          Затвори период
-        </button>
+        {!clientId && (
+          <button
+            onClick={() => setCloseOpen(true)}
+            disabled={closed}
+            className="ml-auto rounded-md border border-border px-3.5 py-2 text-[12px] font-bold text-muted hover:bg-inset disabled:opacity-40"
+          >
+            Затвори период
+          </button>
+        )}
       </div>
 
       {msg && (
@@ -138,6 +174,7 @@ export function ChargesView({
         channel="INVOICE"
         rows={invoices}
         actions={rowActions}
+        clientMode={!!clientId}
         onRunW1={() =>
           run(async () => {
             const r = await runW1(period, "INVOICE");
@@ -163,6 +200,7 @@ export function ChargesView({
         channel="CASH"
         rows={cash}
         actions={rowActions}
+        clientMode={!!clientId}
         onRunW1={() =>
           run(async () => {
             const r = await runW1(period, "CASH");
@@ -347,6 +385,7 @@ function ChargeSection({
   channel,
   rows,
   actions,
+  clientMode = false,
   onRunW1,
   onApproveAll,
 }: {
@@ -354,6 +393,7 @@ function ChargeSection({
   channel: "INVOICE" | "CASH";
   rows: ChargeRow[];
   actions: RowActions;
+  clientMode?: boolean;
   onRunW1: () => void;
   onApproveAll: () => void;
 }) {
@@ -366,22 +406,24 @@ function ChargeSection({
         <span className="rounded-[10px] bg-chip px-2 py-0.5 text-[11px] font-bold text-muted">
           {rows.length}
         </span>
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={onRunW1}
-            disabled={actions.pending || actions.closed}
-            className="flex items-center gap-1.5 rounded-md border border-accent-200 px-3 py-1.5 text-[12px] font-bold text-accent hover:bg-accent-50 disabled:opacity-40"
-          >
-            <Play size={12} /> Изврши
-          </button>
-          <button
-            onClick={onApproveAll}
-            disabled={actions.pending || drafts === 0 || actions.closed}
-            className="rounded-md bg-accent px-3 py-1.5 text-[12px] font-bold text-white hover:opacity-90 disabled:opacity-40"
-          >
-            Одобри DRAFT ({drafts})
-          </button>
-        </div>
+        {!clientMode && (
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={onRunW1}
+              disabled={actions.pending || actions.closed}
+              className="flex items-center gap-1.5 rounded-md border border-accent-200 px-3 py-1.5 text-[12px] font-bold text-accent hover:bg-accent-50 disabled:opacity-40"
+            >
+              <Play size={12} /> Изврши
+            </button>
+            <button
+              onClick={onApproveAll}
+              disabled={actions.pending || drafts === 0 || actions.closed}
+              className="rounded-md bg-accent px-3 py-1.5 text-[12px] font-bold text-white hover:opacity-90 disabled:opacity-40"
+            >
+              Одобри DRAFT ({drafts})
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="overflow-x-auto">
@@ -389,7 +431,7 @@ function ChargeSection({
           className="hidden min-w-[720px] items-center border-b border-border-2 px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.5px] text-muted-2 md:grid"
           style={{ gridTemplateColumns: COLS }}
         >
-          <span>Клиент</span>
+          <span>{clientMode ? "Период" : "Клиент"}</span>
           <span>Број</span>
           <span className="text-right">Основица</span>
           <span className="text-right">Вкупно</span>
@@ -406,7 +448,7 @@ function ChargeSection({
             style={{ gridTemplateColumns: COLS }}
           >
             <span className="flex items-center justify-between gap-2 md:block">
-              <span className="font-bold text-ink">{c.clientName}</span>
+              <span className="font-bold text-ink">{clientMode ? c.period : c.clientName}</span>
               <span className="md:hidden">
                 <StatusBadge status={c.status} />
               </span>

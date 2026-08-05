@@ -16,6 +16,7 @@ import {
   editChargeAction,
   loadChargeForEditAction,
   matchInvoiceLineAction,
+  resetChargePaymentsAction,
   runW1,
   runW1ForClient,
   splitPaymentAction,
@@ -114,6 +115,11 @@ export function ChargesView({
       run(async () => {
         const r = await matchInvoiceLineAction(chargeId, lineId);
         setMsg(r.ok ? "Раздолжено." : r.error);
+      }),
+    onReset: (c: ChargeRow) =>
+      run(async () => {
+        const r = await resetChargePaymentsAction(c.id);
+        setMsg(r.ok ? "Раздолжувањето е поништено — фактурата е повторно отворена." : r.error);
       }),
   };
 
@@ -607,6 +613,7 @@ interface RowActions {
   onCreditNote: (c: ChargeRow) => void;
   onEdit: (c: ChargeRow) => void;
   onConfirmSettle: (chargeId: string, lineId: string) => void;
+  onReset: (c: ChargeRow) => void;
 }
 
 function ChargeSection({
@@ -738,6 +745,14 @@ function ChargeSection({
               ) : c.status === "PAID" ? (
                 <>
                   <span className="text-[12px] font-bold text-success-700">✓ Платено</span>
+                  <button
+                    onClick={() => actions.onReset(c)}
+                    disabled={actions.pending || actions.closed}
+                    title="Поништи го раздолжувањето (врати на неплатено)"
+                    className="text-[12px] font-bold text-warning-700 hover:underline disabled:opacity-40"
+                  >
+                    Поништи
+                  </button>
                   <DeleteBtn actions={actions} c={c} />
                 </>
               ) : isInvoice && c.kind === "INVOICE" ? (

@@ -13,6 +13,7 @@ import {
   deleteCharge,
   editChargeLines,
   generateCharges,
+  resetChargePayments,
 } from "@/lib/workflows/w1";
 import { collectCash } from "@/lib/workflows/w3";
 import { manualMatchStatementLine, settleLineToInvoices } from "@/lib/workflows/w2";
@@ -103,6 +104,19 @@ export async function editChargeAction(
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Едитот не успеа." };
+  }
+}
+
+/** SM-119 — Поништи раздолжување: undo a charge's (wrong) payments and reset it to OPEN. */
+export async function resetChargePaymentsAction(chargeId: string): Promise<SimpleResult> {
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  try {
+    await resetChargePayments(chargeId, auth.user.id);
+    revalidatePath("/charges");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Поништувањето не успеа." };
   }
 }
 

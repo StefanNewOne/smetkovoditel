@@ -101,7 +101,20 @@ export default async function ClientProfile({ params }: { params: Promise<{ id: 
                       {ch.period}
                     </span>
                     <span className="flex-1 text-[13px] text-ink">
-                      {ch.invoiceNumber ?? (ch.kind === "CASH_OBLIGATION" ? "Кеш обврска" : "—")}
+                      {ch.invoiceNumber ? (
+                        <a
+                          href={`/charges/${ch.id}/invoice`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-semibold text-accent hover:underline"
+                        >
+                          {ch.invoiceNumber}
+                        </a>
+                      ) : ch.kind === "CASH_OBLIGATION" ? (
+                        "Кеш обврска"
+                      ) : (
+                        "—"
+                      )}
                     </span>
                     <span className="text-[13px] font-semibold text-ink">
                       {formatMKD(ch.total, { decimals: 0 })} ден

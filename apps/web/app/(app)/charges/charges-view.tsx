@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Lock, Play, X } from "lucide-react";
 import { formatMKD, parseDenari, shiftPeriod } from "@smetko/shared";
 import { StatusBadge } from "@/components/ui/badges";
-import type { ChargeRow, PaymentOption } from "@/lib/charges";
+import type { ChargeRow, OpenInvoiceOption, PaymentOption } from "@/lib/charges";
 import {
   approveAllDrafts,
   approveCharge,
@@ -16,7 +16,10 @@ import {
   editChargeAction,
   loadChargeForEditAction,
   matchInvoiceLineAction,
+  resetChargePaymentsAction,
   runW1,
+  runW1ForClient,
+  splitPaymentAction,
 } from "./actions";
 
 interface CloseBlocker {
@@ -45,6 +48,8 @@ export function ChargesView({
   blockers,
   closed,
   unmatchedPayments,
+  suggestions,
+  openInvoices,
 }: {
   period: string;
   year: string;
@@ -55,6 +60,8 @@ export function ChargesView({
   blockers: CloseBlocker[];
   closed: boolean;
   unmatchedPayments: PaymentOption[];
+  suggestions: Record<string, { lineId: string; label: string }>;
+  openInvoices: OpenInvoiceOption[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -65,6 +72,9 @@ export function ChargesView({
   const [cashFor, setCashFor] = useState<ChargeRow | null>(null);
   const [delFor, setDelFor] = useState<ChargeRow | null>(null);
   const [editFor, setEditFor] = useState<ChargeRow | null>(null);
+  const [w1ClientOpen, setW1ClientOpen] = useState(false);
+  const [w1Client, setW1Client] = useState("");
+  const [splitOpen, setSplitOpen] = useState(false);
 
   const deleteNow = (c: ChargeRow) =>
     run(async () => {
@@ -101,6 +111,16 @@ export function ChargesView({
     onCollect: (c: ChargeRow) => setCashFor(c),
     onCreditNote: (c: ChargeRow) => setCnFor(c),
     onEdit: (c: ChargeRow) => setEditFor(c),
+    onConfirmSettle: (chargeId: string, lineId: string) =>
+      run(async () => {
+        const r = await matchInvoiceLineAction(chargeId, lineId);
+        setMsg(r.ok ? "Раздолжено." : r.error);
+      }),
+    onReset: (c: ChargeRow) =>
+      run(async () => {
+        const r = await resetChargePaymentsAction(c.id);
+        setMsg(r.ok ? "Раздолжувањето е поништено — фактурата е повторно отворена." : r.error);
+      }),
   };
 
   return (
@@ -153,13 +173,29 @@ export function ChargesView({
           </span>
         )}
         {!clientId && (
-          <button
-            onClick={() => setCloseOpen(true)}
-            disabled={closed}
-            className="ml-auto rounded-md border border-border px-3.5 py-2 text-[12px] font-bold text-muted hover:bg-inset disabled:opacity-40"
-          >
-            Затвори период
-          </button>
+          <>
+            <button
+              onClick={() => setSplitOpen(true)}
+              disabled={closed}
+              className="ml-auto rounded-md border border-border px-3.5 py-2 text-[12px] font-bold text-muted hover:bg-inset disabled:opacity-40"
+            >
+              Раздели уплата
+            </button>
+            <button
+              onClick={() => setW1ClientOpen(true)}
+              disabled={closed}
+              className="rounded-md border border-accent-200 px-3.5 py-2 text-[12px] font-bold text-accent hover:bg-accent-50 disabled:opacity-40"
+            >
+              Изврши (по клиент)
+            </button>
+            <button
+              onClick={() => setCloseOpen(true)}
+              disabled={closed}
+              className="rounded-md border border-border px-3.5 py-2 text-[12px] font-bold text-muted hover:bg-inset disabled:opacity-40"
+            >
+              Затвори период
+            </button>
+          </>
         )}
       </div>
 
@@ -175,6 +211,7 @@ export function ChargesView({
         rows={invoices}
         actions={rowActions}
         clientMode={!!clientId}
+        suggestions={suggestions}
         onRunW1={() =>
           run(async () => {
             const r = await runW1(period, "INVOICE");
@@ -353,7 +390,204 @@ export function ChargesView({
           }}
         />
       )}
+
+      {w1ClientOpen && (
+        <Modal
+          title={`Изврши W1 за еден клиент · ${period}`}
+          onClose={() => setW1ClientOpen(false)}
+        >
+          <p className="mb-3 text-[12px] text-muted-2">
+            Создава задолжување само за избраниот клиент (ако веќе нема за овој период).
+          </p>
+          <select
+            value={w1Client}
+            onChange={(e) => setW1Client(e.target.value)}
+            className="w-full rounded-md border border-input bg-surface px-3 py-2.5 text-[13px]"
+          >
+            <option value="">Избери клиент…</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <div className="mt-5 flex justify-between">
+            <button
+              onClick={() => setW1ClientOpen(false)}
+              className="rounded-md border border-border px-4 py-2 text-[12px] font-bold text-muted hover:bg-inset"
+            >
+              Откажи
+            </button>
+            <button
+              disabled={pending || !w1Client}
+              onClick={() =>
+                run(async () => {
+                  const r = await runW1ForClient(period, w1Client);
+                  setW1ClientOpen(false);
+                  setW1Client("");
+                  setMsg(r.ok ? `Создадени ${r.created}, прескокнати ${r.skipped}.` : r.error);
+                })
+              }
+              className="rounded-md bg-accent px-5 py-2 text-[13px] font-bold text-white hover:opacity-90 disabled:opacity-40"
+            >
+              Изврши
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {splitOpen && (
+        <SplitPaymentModal
+          payments={unmatchedPayments}
+          invoices={openInvoices}
+          pending={pending}
+          onClose={() => setSplitOpen(false)}
+          onSubmit={(lineId, allocations) =>
+            run(async () => {
+              const r = await splitPaymentAction(lineId, allocations);
+              setSplitOpen(false);
+              setMsg(r.ok ? "Уплатата е раздолжена на фактурите." : r.error);
+            })
+          }
+        />
+      )}
     </div>
+  );
+}
+
+function SplitPaymentModal({
+  payments,
+  invoices,
+  pending,
+  onClose,
+  onSubmit,
+}: {
+  payments: PaymentOption[];
+  invoices: OpenInvoiceOption[];
+  pending: boolean;
+  onClose: () => void;
+  onSubmit: (lineId: string, allocations: { chargeId: string; amount: number }[]) => void;
+}) {
+  const [lineId, setLineId] = useState("");
+  const [rows, setRows] = useState<{ chargeId: string; amountRaw: string }[]>([
+    { chargeId: "", amountRaw: "" },
+  ]);
+  const line = payments.find((p) => p.id === lineId);
+  const allocated = rows.reduce((s, r) => s + safeDeni(r.amountRaw), 0);
+  const remainder = (line?.amount ?? 0) - allocated;
+  const setRow = (i: number, patch: Partial<{ chargeId: string; amountRaw: string }>) =>
+    setRows(rows.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  const chosen = rows.filter((r) => r.chargeId && safeDeni(r.amountRaw) > 0);
+  const canSubmit = !!lineId && chosen.length > 0 && allocated > 0 && remainder >= 0;
+
+  return (
+    <Modal title="Раздели уплата на повеќе фактури" onClose={onClose}>
+      <label className="block text-[12px] font-semibold text-muted">
+        Уплата (од извод)
+        <select
+          value={lineId}
+          onChange={(e) => setLineId(e.target.value)}
+          className="mt-1 w-full rounded-md border border-input px-3 py-2 text-[12.5px]"
+        >
+          <option value="">Избери уплата…</option>
+          {payments.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <div className="mt-3 flex flex-col gap-2">
+        <p className="text-[11px] font-semibold text-muted-2">
+          Распредели на фактури (низ клиенти):
+        </p>
+        {rows.map((r, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <select
+              value={r.chargeId}
+              onChange={(e) => {
+                const inv = invoices.find((x) => x.id === e.target.value);
+                setRow(i, {
+                  chargeId: e.target.value,
+                  amountRaw: inv ? String(inv.remaining / 100).replace(".", ",") : r.amountRaw,
+                });
+              }}
+              className="min-w-0 flex-1 rounded-md border border-input px-2 py-1.5 text-[12px]"
+            >
+              <option value="">Избери фактура…</option>
+              {invoices.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.label}
+                </option>
+              ))}
+            </select>
+            <input
+              value={r.amountRaw}
+              onChange={(e) => setRow(i, { amountRaw: e.target.value })}
+              inputMode="decimal"
+              placeholder="0,00"
+              className="w-28 rounded-md border border-input px-2 py-1.5 text-right text-[12px]"
+            />
+            {rows.length > 1 && (
+              <button
+                onClick={() => setRows(rows.filter((_, j) => j !== i))}
+                className="text-muted-2 hover:text-danger"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        ))}
+        <button
+          onClick={() => setRows([...rows, { chargeId: "", amountRaw: "" }])}
+          className="self-start text-[12px] font-semibold text-accent hover:underline"
+        >
+          + Додади фактура
+        </button>
+      </div>
+
+      {line && (
+        <div className="mt-3 flex justify-between text-[12.5px]">
+          <span className="text-muted">
+            Уплата {formatMKD(line.amount, { decimals: 0 })} · распределено{" "}
+            {formatMKD(allocated, { decimals: 0 })}
+          </span>
+          <span
+            className={
+              remainder === 0
+                ? "font-bold text-success"
+                : remainder < 0
+                  ? "font-bold text-danger"
+                  : "text-muted-2"
+            }
+          >
+            остаток {formatMKD(remainder, { decimals: 0 })}
+          </span>
+        </div>
+      )}
+
+      <div className="mt-5 flex justify-between">
+        <button
+          onClick={onClose}
+          className="rounded-md border border-border px-4 py-2 text-[12px] font-bold text-muted hover:bg-inset"
+        >
+          Откажи
+        </button>
+        <button
+          disabled={pending || !canSubmit}
+          onClick={() =>
+            onSubmit(
+              lineId,
+              chosen.map((r) => ({ chargeId: r.chargeId, amount: safeDeni(r.amountRaw) })),
+            )
+          }
+          className="rounded-md bg-accent px-5 py-2 text-[13px] font-bold text-white hover:opacity-90 disabled:opacity-40"
+        >
+          Раздели и наплати
+        </button>
+      </div>
+    </Modal>
   );
 }
 
@@ -378,6 +612,8 @@ interface RowActions {
   onCollect: (c: ChargeRow) => void;
   onCreditNote: (c: ChargeRow) => void;
   onEdit: (c: ChargeRow) => void;
+  onConfirmSettle: (chargeId: string, lineId: string) => void;
+  onReset: (c: ChargeRow) => void;
 }
 
 function ChargeSection({
@@ -386,6 +622,7 @@ function ChargeSection({
   rows,
   actions,
   clientMode = false,
+  suggestions = {},
   onRunW1,
   onApproveAll,
 }: {
@@ -394,6 +631,7 @@ function ChargeSection({
   rows: ChargeRow[];
   actions: RowActions;
   clientMode?: boolean;
+  suggestions?: Record<string, { lineId: string; label: string }>;
   onRunW1: () => void;
   onApproveAll: () => void;
 }) {
@@ -507,10 +745,28 @@ function ChargeSection({
               ) : c.status === "PAID" ? (
                 <>
                   <span className="text-[12px] font-bold text-success-700">✓ Платено</span>
+                  <button
+                    onClick={() => actions.onReset(c)}
+                    disabled={actions.pending || actions.closed}
+                    title="Поништи го раздолжувањето (врати на неплатено)"
+                    className="text-[12px] font-bold text-warning-700 hover:underline disabled:opacity-40"
+                  >
+                    Поништи
+                  </button>
                   <DeleteBtn actions={actions} c={c} />
                 </>
               ) : isInvoice && c.kind === "INVOICE" ? (
                 <>
+                  {suggestions[c.id] && (
+                    <button
+                      onClick={() => actions.onConfirmSettle(c.id, suggestions[c.id]!.lineId)}
+                      disabled={actions.pending || actions.closed}
+                      title={`Предлог: ${suggestions[c.id]!.label}`}
+                      className="rounded-[7px] bg-success px-3 py-1.5 text-[12px] font-bold text-white hover:opacity-90 disabled:opacity-40"
+                    >
+                      Потврди раздолжување
+                    </button>
+                  )}
                   <button
                     onClick={() => actions.onPay(c)}
                     disabled={actions.pending || actions.closed}

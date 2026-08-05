@@ -6,6 +6,8 @@ import {
   getCharges,
   getChargesByClient,
   getClientOptions,
+  getOpenInvoicesForSplit,
+  getPaymentSuggestions,
   getUnmatchedPayments,
 } from "@/lib/charges";
 import { getCloseBlockers } from "@/lib/workflows/w8";
@@ -20,15 +22,17 @@ export default async function ChargesPage({
   const period = raw && isValidPeriod(raw) ? raw : currentPeriod();
   const year = period.slice(0, 4);
 
-  const [clients, blockers, periodRow, unmatchedPayments] = await Promise.all([
+  const [clients, blockers, periodRow, unmatchedPayments, openInvoices] = await Promise.all([
     getClientOptions(),
     getCloseBlockers(period),
     prisma.period.findUnique({ where: { id: period } }),
     getUnmatchedPayments(),
+    getOpenInvoicesForSplit(),
   ]);
 
   const clientId = client && clients.some((c) => c.id === client) ? client : undefined;
   const charges = clientId ? await getChargesByClient(clientId, year) : await getCharges(period);
+  const suggestions = clientId ? {} : await getPaymentSuggestions(period);
 
   return (
     <ChargesView
@@ -41,6 +45,8 @@ export default async function ChargesPage({
       blockers={blockers}
       closed={periodRow?.status === "CLOSED"}
       unmatchedPayments={unmatchedPayments}
+      suggestions={suggestions}
+      openInvoices={openInvoices}
     />
   );
 }

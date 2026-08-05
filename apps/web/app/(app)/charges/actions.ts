@@ -13,9 +13,10 @@ import {
   deleteCharge,
   editChargeLines,
   generateCharges,
+  resetChargePayments,
 } from "@/lib/workflows/w1";
 import { collectCash } from "@/lib/workflows/w3";
-import { manualMatchStatementLine } from "@/lib/workflows/w2";
+import { manualMatchStatementLine, settleLineToInvoices } from "@/lib/workflows/w2";
 import { closePeriod, type CloseResult } from "@/lib/workflows/w8";
 
 export type W1Result =
@@ -30,6 +31,21 @@ export async function runW1(period: string, channel?: "INVOICE" | "CASH"): Promi
   if (!isValidPeriod(period)) return { ok: false, error: "Невалиден период." };
   try {
     const { created, skipped } = await generateCharges(period, user.id, channel);
+    revalidatePath("/charges");
+    return { ok: true, created, skipped };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "W1 не успеа." };
+  }
+}
+
+/** SM-119 — ИЗВРШИ (по клиент): generate the recurring charge for a single client in the period. */
+export async function runW1ForClient(period: string, clientId: string): Promise<W1Result> {
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  if (!isValidPeriod(period)) return { ok: false, error: "Невалиден период." };
+  if (!clientId) return { ok: false, error: "Избери клиент." };
+  try {
+    const { created, skipped } = await generateCharges(period, auth.user.id, undefined, clientId);
     revalidatePath("/charges");
     return { ok: true, created, skipped };
   } catch (e) {
@@ -88,6 +104,19 @@ export async function editChargeAction(
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Едитот не успеа." };
+  }
+}
+
+/** SM-119 — Поништи раздолжување: undo a charge's (wrong) payments and reset it to OPEN. */
+export async function resetChargePaymentsAction(chargeId: string): Promise<SimpleResult> {
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  try {
+    await resetChargePayments(chargeId, auth.user.id);
+    revalidatePath("/charges");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Поништувањето не успеа." };
   }
 }
 
@@ -156,6 +185,23 @@ export async function collectCashOnChargeAction(
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Наплатата не успеа." };
+  }
+}
+
+/** SM-119 — split ONE incoming statement line across MULTIPLE invoices (possibly across clients). */
+export async function splitPaymentAction(
+  lineId: string,
+  allocations: { chargeId: string; amount: number }[],
+): Promise<SimpleResult> {
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  try {
+    await settleLineToInvoices(lineId, allocations, auth.user.id);
+    revalidatePath("/charges");
+    revalidatePath("/resolve");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Раздолжувањето не успеа." };
   }
 }
 

@@ -32,11 +32,16 @@ export async function generateCharges(
   period: string,
   userId: string,
   channel?: "INVOICE" | "CASH",
+  clientId?: string, // SM-119: limit the run to a single client (ИЗВРШИ по клиент)
 ) {
   await assertPeriodOpen(prisma, period); // B9
   const start = periodStart(period);
   const clients = await prisma.client.findMany({
-    where: { status: ClientStatus.ACTIVE, ...(channel ? { paymentChannel: channel } : {}) },
+    where: {
+      status: ClientStatus.ACTIVE,
+      ...(channel ? { paymentChannel: channel } : {}),
+      ...(clientId ? { id: clientId } : {}),
+    },
     include: { packages: true, lineTemplates: { where: { active: true } } },
   });
 
@@ -381,6 +386,44 @@ export async function deleteCharge(chargeId: string, userId: string) {
       userId,
     });
     await tx.charge.delete({ where: { id: chargeId } });
+  });
+}
+
+/**
+ * SM-119 — unbook a charge's payments ("Поништи раздолжување"): delete its Payments, free the bank
+ * statement lines they consumed (re-matchable), and reset the charge to OPEN. Keeps the invoice and
+ * its number — only the (wrong) settlement is undone. Period-guarded (B9), audited. Overpay credit is
+ * NOT auto-reversed here (client-level); phantom credit is corrected explicitly during cleanup.
+ */
+export async function resetChargePayments(chargeId: string, userId: string): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const charge = await tx.charge.findUnique({ where: { id: chargeId } });
+    if (!charge) throw new Error("Задолжувањето не постои.");
+    await assertPeriodOpen(tx, charge.period); // B9
+
+    const payments = await tx.payment.findMany({
+      where: { chargeId },
+      select: { id: true, statementLineId: true },
+    });
+    const lineIds = payments.map((p) => p.statementLineId).filter((x): x is string => !!x);
+    if (lineIds.length)
+      await tx.statementLine.updateMany({
+        where: { id: { in: lineIds } },
+        data: { processed: false, linkedType: null, linkedId: null },
+      });
+    await tx.payment.deleteMany({ where: { chargeId } });
+
+    await tx.charge.update({
+      where: { id: chargeId },
+      data: { paidAmount: 0, status: ChargeStatus.OPEN },
+    });
+    await writeAudit(tx, {
+      entity: "Charge",
+      entityId: chargeId,
+      action: "payments.reset",
+      diff: { removedPayments: payments.length, freedLines: lineIds.length },
+      userId,
+    });
   });
 }
 

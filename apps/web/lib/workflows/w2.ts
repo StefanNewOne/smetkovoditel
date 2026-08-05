@@ -454,26 +454,10 @@ export async function ingestParsedStatement(
         }
       }
 
-      // FIFO (Part 2B): an incoming line still unmatched → settle the payer's oldest open invoice
-      // by giro account, so it never piles up in Решавање.
-      if (line.direction === Direction.IN) {
-        const cur = await tx.statementLine.findUnique({
-          where: { id: sl.id },
-          select: { processed: true },
-        });
-        if (
-          !cur?.processed &&
-          (await settleOldestByAccount(
-            tx,
-            sl.id,
-            line.amount,
-            statementDate,
-            line.reference,
-            userId,
-          ))
-        )
-          clientMatched++;
-      }
+      // SM-119: FIFO-by-account NO LONGER auto-settles on import. Auto-settling the oldest open
+      // invoice by giro account (without amount/reference corroboration) mis-booked payments to the
+      // wrong invoice/client. An incoming line with no matched повикување now stays unprocessed and
+      // is settled only from ЗАДОЛЖУВАЊА with an explicit "Потврди раздолжување" confirmation.
     }
 
     await writeAudit(tx, {
@@ -711,6 +695,77 @@ export async function manualMatchStatementLine(lineId: string, chargeId: string,
       entityId: line.id,
       action: "match.manual",
       diff: { chargeId, applied },
+      userId,
+    });
+  });
+}
+
+/**
+ * SM-119 — apply ONE incoming statement line across MULTIPLE invoices (possibly of different client
+ * records — e.g. one company paying two brand invoices at once). Each allocation books a Payment to
+ * its charge; the sum must not exceed the line. Period-guarded (B9), audited. Explicit amounts only —
+ * no FIFO, no auto-credit of a phantom remainder.
+ */
+export async function settleLineToInvoices(
+  lineId: string,
+  allocations: { chargeId: string; amount: number }[],
+  userId: string,
+): Promise<void> {
+  const allocs = allocations.filter((a) => a.amount > 0);
+  if (allocs.length === 0) throw new Error("Внеси барем една алокација.");
+  await prisma.$transaction(async (tx) => {
+    const line = await tx.statementLine.findUnique({ where: { id: lineId } });
+    if (!line || line.processed) throw new Error("Линијата не постои или е веќе решена.");
+    const sum = allocs.reduce((s, a) => s + a.amount, 0);
+    if (sum > line.amount)
+      throw new Error("Збирот на алокациите го надминува износот на уплатата.");
+
+    // Payment.statementLineId is 1:1 (@unique) — only the first allocation carries the line link;
+    // the rest reference the same statement/повик for traceability (the split is fully audited).
+    let first = true;
+    for (const alloc of allocs) {
+      const charge = await tx.charge.findUnique({ where: { id: alloc.chargeId } });
+      if (!charge) throw new Error("Задолжувањето не постои.");
+      await assertPeriodOpen(tx, charge.period); // B9
+      const remaining = charge.total - charge.paidAmount;
+      const applied = Math.min(alloc.amount, Math.max(remaining, 0));
+      const overpay = alloc.amount - applied;
+      await tx.payment.create({
+        data: {
+          clientId: charge.clientId,
+          chargeId: charge.id,
+          channel: PayChannel.BANK,
+          amount: applied,
+          date: line.date,
+          reference: line.reference,
+          matchStatus: MatchStatus.MANUAL_MATCHED,
+          statementLineId: first ? line.id : null,
+        },
+      });
+      first = false;
+      const newPaid = charge.paidAmount + applied;
+      await tx.charge.update({
+        where: { id: charge.id },
+        data: {
+          paidAmount: newPaid,
+          status: newPaid >= charge.total ? ChargeStatus.PAID : ChargeStatus.PARTIALLY_PAID,
+        },
+      });
+      if (overpay > 0)
+        await tx.client.update({
+          where: { id: charge.clientId },
+          data: { creditBalance: { increment: overpay } },
+        });
+    }
+    await tx.statementLine.update({
+      where: { id: line.id },
+      data: { processed: true, linkedType: "Charge", linkedId: allocs[0]!.chargeId },
+    });
+    await writeAudit(tx, {
+      entity: "StatementLine",
+      entityId: line.id,
+      action: "match.split",
+      diff: { allocations: allocs, lineAmount: line.amount },
       userId,
     });
   });

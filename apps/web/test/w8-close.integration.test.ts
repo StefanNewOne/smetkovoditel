@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { periodStart } from "@smetko/shared";
 import { PeriodClosedError, assertPeriodOpen } from "@/lib/period-guard";
 import { generateCharges } from "@/lib/workflows/w1";
 import { closePeriod, getCloseBlockers } from "@/lib/workflows/w8";
@@ -13,7 +14,8 @@ import { createInvoiceClient } from "./setup/factories";
 const PERIOD = "2026-07";
 let userId = "";
 
-/** Record a zero-difference blagajna stocktake so that blocker is satisfied. */
+/** Record a zero-difference blagajna stocktake so that blocker is satisfied. The stocktake is matched
+ *  to a period by its createdAt, so it must fall inside PERIOD regardless of the wall clock. */
 async function recordZeroStocktake() {
   await prisma.auditLog.create({
     data: {
@@ -22,6 +24,7 @@ async function recordZeroStocktake() {
       action: "stocktake",
       diff: { difference: 0 },
       userId,
+      createdAt: periodStart(PERIOD), // within the period, not the test-run date
     },
   });
 }

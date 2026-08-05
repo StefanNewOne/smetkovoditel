@@ -37,6 +37,35 @@ export async function getCharges(period: string): Promise<ChargeRow[]> {
   }));
 }
 
+export interface ChargeEditLine {
+  description: string;
+  amount: number; // дени
+}
+export interface ChargeEditData {
+  kind: string;
+  editableLines: ChargeEditLine[]; // SERVICE first, then OTHER — user-editable
+  passthrough: ChargeEditLine[]; // ADS/ACTORS — computed, shown read-only
+}
+
+/** SM-116 — the lines of a DRAFT charge, split into editable (SERVICE/OTHER) and the auto-computed
+ *  pass-through (ADS/ACTORS) which the edit form must not touch. */
+export async function getChargeForEdit(chargeId: string): Promise<ChargeEditData | null> {
+  const charge = await prisma.charge.findUnique({
+    where: { id: chargeId },
+    include: { lines: true },
+  });
+  if (!charge) return null;
+  const rank: Record<string, number> = { SERVICE: 0, OTHER: 1 };
+  const editableLines = charge.lines
+    .filter((l) => l.type === "SERVICE" || l.type === "OTHER")
+    .sort((a, b) => (rank[a.type] ?? 9) - (rank[b.type] ?? 9))
+    .map((l) => ({ description: l.description, amount: l.amount }));
+  const passthrough = charge.lines
+    .filter((l) => l.type === "META_ADS" || l.type === "ACTORS")
+    .map((l) => ({ description: l.description, amount: l.amount }));
+  return { kind: charge.kind, editableLines, passthrough };
+}
+
 export interface PaymentOption {
   id: string;
   label: string; // "Извод 152 · 05.07 · +30.000 · повик 1-3/2026"

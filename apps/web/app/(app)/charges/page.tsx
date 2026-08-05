@@ -6,6 +6,7 @@ import {
   getCharges,
   getChargesByClient,
   getClientOptions,
+  getOpenInvoicesForSplit,
   getPaymentSuggestions,
   getUnmatchedPayments,
 } from "@/lib/charges";
@@ -21,11 +22,12 @@ export default async function ChargesPage({
   const period = raw && isValidPeriod(raw) ? raw : currentPeriod();
   const year = period.slice(0, 4);
 
-  const [clients, blockers, periodRow, unmatchedPayments] = await Promise.all([
+  const [clients, blockers, periodRow, unmatchedPayments, openInvoices] = await Promise.all([
     getClientOptions(),
     getCloseBlockers(period),
     prisma.period.findUnique({ where: { id: period } }),
     getUnmatchedPayments(),
+    getOpenInvoicesForSplit(),
   ]);
 
   const clientId = client && clients.some((c) => c.id === client) ? client : undefined;
@@ -44,6 +46,7 @@ export default async function ChargesPage({
       closed={periodRow?.status === "CLOSED"}
       unmatchedPayments={unmatchedPayments}
       suggestions={suggestions}
+      openInvoices={openInvoices}
     />
   );
 }

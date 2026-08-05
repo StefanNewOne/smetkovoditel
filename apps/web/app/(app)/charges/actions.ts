@@ -15,7 +15,7 @@ import {
   generateCharges,
 } from "@/lib/workflows/w1";
 import { collectCash } from "@/lib/workflows/w3";
-import { manualMatchStatementLine } from "@/lib/workflows/w2";
+import { manualMatchStatementLine, settleLineToInvoices } from "@/lib/workflows/w2";
 import { closePeriod, type CloseResult } from "@/lib/workflows/w8";
 
 export type W1Result =
@@ -171,6 +171,23 @@ export async function collectCashOnChargeAction(
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Наплатата не успеа." };
+  }
+}
+
+/** SM-119 — split ONE incoming statement line across MULTIPLE invoices (possibly across clients). */
+export async function splitPaymentAction(
+  lineId: string,
+  allocations: { chargeId: string; amount: number }[],
+): Promise<SimpleResult> {
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  try {
+    await settleLineToInvoices(lineId, allocations, auth.user.id);
+    revalidatePath("/charges");
+    revalidatePath("/resolve");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Раздолжувањето не успеа." };
   }
 }
 

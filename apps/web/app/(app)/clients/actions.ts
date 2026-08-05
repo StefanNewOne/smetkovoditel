@@ -170,6 +170,33 @@ export async function removeGiroAccountAction(id: string, clientId: string): Pro
   return { ok: true, id: clientId };
 }
 
+/** SM-118 — change a client's billing cycle (месечен ↔ 3-месечен). W1 respects it from next run. */
+export async function setBillingCycleAction(
+  clientId: string,
+  cycle: "MONTHLY" | "QUARTERLY",
+): Promise<ActionResult> {
+  const auth = await requireWriter();
+  if (!auth.ok) return { ok: false, error: auth.error };
+  if (cycle !== "MONTHLY" && cycle !== "QUARTERLY")
+    return { ok: false, error: "Невалиден циклус." };
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.client.update({ where: { id: clientId }, data: { billingCycle: cycle } });
+      await writeAudit(tx, {
+        entity: "Client",
+        entityId: clientId,
+        action: "billingCycle",
+        diff: { cycle },
+        userId: auth.user.id,
+      });
+    });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Не успеа." };
+  }
+  revalidatePath(`/clients/${clientId}`);
+  return { ok: true, id: clientId };
+}
+
 /** Create a client + its first (versioned) package + optional Meta/Actors extras (SM-10). */
 export async function createClient(input: CreateClientInput): Promise<ActionResult> {
   const auth = await requireWriter();
@@ -196,6 +223,7 @@ export async function createClient(input: CreateClientInput): Promise<ActionResu
         contactEmail: d.contactEmail || null,
         contactPhone: d.contactPhone || null,
         paymentChannel: d.paymentChannel,
+        billingCycle: d.billingCycle, // SM-118 — cycle lives on the client (изменливо)
         vatApplicable: d.paymentChannel === "INVOICE",
         paymentTermDays: d.paymentTermDays,
         number,

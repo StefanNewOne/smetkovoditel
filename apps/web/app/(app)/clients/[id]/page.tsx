@@ -10,6 +10,7 @@ import { ClientAdminActions } from "./client-admin-actions";
 import { GiroAccounts } from "./giro-accounts";
 import { ClientContract } from "./client-contract";
 import { ClientLegalDetails } from "./client-legal-details";
+import { BillingCycle } from "./billing-cycle";
 
 function fmtDate(d: Date | null): string {
   return d
@@ -129,6 +130,7 @@ export default async function ClientProfile({ params }: { params: Promise<{ id: 
 
         {/* Right column */}
         <div className="flex flex-col gap-4">
+          <BillingCycle clientId={client.id} cycle={client.billingCycle} />
           <ClientLegalDetails
             clientId={client.id}
             legalName={client.legalName}

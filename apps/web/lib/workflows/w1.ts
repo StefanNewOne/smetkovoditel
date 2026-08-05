@@ -72,7 +72,7 @@ export async function generateCharges(
       skipped++; // client has not started yet in this period
       continue;
     }
-    if (pkg.billingCycle === "QUARTERLY") {
+    if (client.billingCycle === "QUARTERLY") {
       const monthsSinceStart =
         (start.getUTCFullYear() - anchorMonth.getUTCFullYear()) * 12 +
         (start.getUTCMonth() - anchorMonth.getUTCMonth());
@@ -91,7 +91,7 @@ export async function generateCharges(
           type: LineType.SERVICE,
           description:
             pkg.description ??
-            (pkg.billingCycle === "QUARTERLY" ? "Тромесечен пакет" : "Месечен пакет"),
+            (client.billingCycle === "QUARTERLY" ? "Тромесечен пакет" : "Месечен пакет"),
           amount: pkg.monthlyAmount,
           vatRate,
         },

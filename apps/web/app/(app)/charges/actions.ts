@@ -37,6 +37,21 @@ export async function runW1(period: string, channel?: "INVOICE" | "CASH"): Promi
   }
 }
 
+/** SM-119 — ИЗВРШИ (по клиент): generate the recurring charge for a single client in the period. */
+export async function runW1ForClient(period: string, clientId: string): Promise<W1Result> {
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  if (!isValidPeriod(period)) return { ok: false, error: "Невалиден период." };
+  if (!clientId) return { ok: false, error: "Избери клиент." };
+  try {
+    const { created, skipped } = await generateCharges(period, auth.user.id, undefined, clientId);
+    revalidatePath("/charges");
+    return { ok: true, created, skipped };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "W1 не успеа." };
+  }
+}
+
 /** Approve a DRAFT — dispatch by kind: INVOICE → assign number; CASH_OBLIGATION → OPEN (SM-89). */
 export async function approveCharge(chargeId: string): Promise<ApproveResult> {
   const auth = await requireWriter();

@@ -17,6 +17,7 @@ import {
   loadChargeForEditAction,
   matchInvoiceLineAction,
   runW1,
+  runW1ForClient,
 } from "./actions";
 
 interface CloseBlocker {
@@ -65,6 +66,8 @@ export function ChargesView({
   const [cashFor, setCashFor] = useState<ChargeRow | null>(null);
   const [delFor, setDelFor] = useState<ChargeRow | null>(null);
   const [editFor, setEditFor] = useState<ChargeRow | null>(null);
+  const [w1ClientOpen, setW1ClientOpen] = useState(false);
+  const [w1Client, setW1Client] = useState("");
 
   const deleteNow = (c: ChargeRow) =>
     run(async () => {
@@ -153,13 +156,22 @@ export function ChargesView({
           </span>
         )}
         {!clientId && (
-          <button
-            onClick={() => setCloseOpen(true)}
-            disabled={closed}
-            className="ml-auto rounded-md border border-border px-3.5 py-2 text-[12px] font-bold text-muted hover:bg-inset disabled:opacity-40"
-          >
-            Затвори период
-          </button>
+          <>
+            <button
+              onClick={() => setW1ClientOpen(true)}
+              disabled={closed}
+              className="ml-auto rounded-md border border-accent-200 px-3.5 py-2 text-[12px] font-bold text-accent hover:bg-accent-50 disabled:opacity-40"
+            >
+              Изврши (по клиент)
+            </button>
+            <button
+              onClick={() => setCloseOpen(true)}
+              disabled={closed}
+              className="rounded-md border border-border px-3.5 py-2 text-[12px] font-bold text-muted hover:bg-inset disabled:opacity-40"
+            >
+              Затвори период
+            </button>
+          </>
         )}
       </div>
 
@@ -352,6 +364,51 @@ export function ChargesView({
             router.refresh();
           }}
         />
+      )}
+
+      {w1ClientOpen && (
+        <Modal
+          title={`Изврши W1 за еден клиент · ${period}`}
+          onClose={() => setW1ClientOpen(false)}
+        >
+          <p className="mb-3 text-[12px] text-muted-2">
+            Создава задолжување само за избраниот клиент (ако веќе нема за овој период).
+          </p>
+          <select
+            value={w1Client}
+            onChange={(e) => setW1Client(e.target.value)}
+            className="w-full rounded-md border border-input bg-surface px-3 py-2.5 text-[13px]"
+          >
+            <option value="">Избери клиент…</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <div className="mt-5 flex justify-between">
+            <button
+              onClick={() => setW1ClientOpen(false)}
+              className="rounded-md border border-border px-4 py-2 text-[12px] font-bold text-muted hover:bg-inset"
+            >
+              Откажи
+            </button>
+            <button
+              disabled={pending || !w1Client}
+              onClick={() =>
+                run(async () => {
+                  const r = await runW1ForClient(period, w1Client);
+                  setW1ClientOpen(false);
+                  setW1Client("");
+                  setMsg(r.ok ? `Создадени ${r.created}, прескокнати ${r.skipped}.` : r.error);
+                })
+              }
+              className="rounded-md bg-accent px-5 py-2 text-[13px] font-bold text-white hover:opacity-90 disabled:opacity-40"
+            >
+              Изврши
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   );

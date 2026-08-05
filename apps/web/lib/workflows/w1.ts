@@ -32,11 +32,16 @@ export async function generateCharges(
   period: string,
   userId: string,
   channel?: "INVOICE" | "CASH",
+  clientId?: string, // SM-119: limit the run to a single client (ИЗВРШИ по клиент)
 ) {
   await assertPeriodOpen(prisma, period); // B9
   const start = periodStart(period);
   const clients = await prisma.client.findMany({
-    where: { status: ClientStatus.ACTIVE, ...(channel ? { paymentChannel: channel } : {}) },
+    where: {
+      status: ClientStatus.ACTIVE,
+      ...(channel ? { paymentChannel: channel } : {}),
+      ...(clientId ? { id: clientId } : {}),
+    },
     include: { packages: true, lineTemplates: { where: { active: true } } },
   });
 

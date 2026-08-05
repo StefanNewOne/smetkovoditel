@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ExternalLink, X } from "lucide-react";
+import { formatMKD } from "@smetko/shared";
 import type {
   AdAccountRow,
   ClientOption,
@@ -11,7 +12,9 @@ import type {
   SpendRow,
 } from "@/lib/meta";
 import {
+  bookAllOtherCardAction,
   bookFacebkAction,
+  bookOtherCardAction,
   deleteReceiptAction,
   ignoreFacebkAction,
   mapAdAccountAction,
@@ -40,6 +43,10 @@ export function MetaView({
   const [msg, setMsg] = useState<string>("");
   const [f, setF] = useState(from);
   const [t, setT] = useState(to);
+  const [rate, setRate] = useState("");
+  const rateNum = Number(rate.replace(",", ".")) || 0;
+  const otherCard = orphanReceipts.filter((r) => r.isOtherCard);
+  const statementCard = orphanReceipts.filter((r) => !r.isOtherCard);
 
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>) => {
     setMsg("");
@@ -182,7 +189,54 @@ export function MetaView({
           <Empty>✓ Нема сирачиња фактури.</Empty>
         ) : (
           <div className="flex flex-col">
-            {orphanReceipts.map((r) => (
+            {otherCard.length > 0 && (
+              <div className="flex flex-wrap items-center gap-3 border-b border-border-2 px-4 py-2.5">
+                <span className="text-[12px] font-semibold text-ink">
+                  Друга картичка (без извод) — {otherCard.length} фактури · USD се претвора во МКД
+                </span>
+                <label className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-2">
+                  USD→МКД курс
+                  <input
+                    value={rate}
+                    onChange={(e) => setRate(e.target.value)}
+                    placeholder="61,50"
+                    className="w-24 rounded-md border border-input px-2 py-1 text-[12px]"
+                  />
+                </label>
+                <button
+                  onClick={() =>
+                    startTransition(async () => {
+                      setMsg("");
+                      if (rateNum <= 0) {
+                        setMsg("Внеси валиден USD→МКД курс.");
+                        return;
+                      }
+                      const r = await bookAllOtherCardAction(rateNum);
+                      setMsg(
+                        r.ok
+                          ? `Книжени ${r.count} фактури (${formatMKD(r.totalMkd, { decimals: 0 })} ден).`
+                          : r.error,
+                      );
+                      router.refresh();
+                    })
+                  }
+                  disabled={pending || rateNum <= 0}
+                  className="rounded-md bg-accent px-3 py-1.5 text-[12px] font-bold text-white disabled:opacity-40"
+                >
+                  Книжи ги сите
+                </button>
+              </div>
+            )}
+            {otherCard.map((r) => (
+              <OtherCardReceiptRow
+                key={r.id}
+                receipt={r}
+                rate={rateNum}
+                pending={pending}
+                run={run}
+              />
+            ))}
+            {statementCard.map((r) => (
               <ReceiptRow key={r.id} receipt={r} lines={facebkLines} pending={pending} run={run} />
             ))}
           </div>
@@ -237,6 +291,66 @@ function FacebkRow({
           className="rounded border border-border px-2 py-1 text-[11px] font-semibold text-muted disabled:opacity-40"
         >
           Игнорирај
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function OtherCardReceiptRow({
+  receipt,
+  rate,
+  pending,
+  run,
+}: {
+  receipt: OrphanReceiptRow;
+  rate: number;
+  pending: boolean;
+  run: (fn: () => Promise<{ ok: boolean; error?: string }>) => void;
+}) {
+  const hasPdf = receipt.attachmentUrl?.startsWith("/api/");
+  const mkd = rate > 0 ? Math.round(receipt.usdCents * rate) : 0;
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b border-border-3 px-4 py-2 text-[12.5px] last:border-0">
+      <span className="font-semibold text-ink">{receipt.accountName}</span>
+      <span className="rounded bg-chip px-1.5 py-0.5 text-[10px] font-bold text-muted-2">
+        •••{receipt.cardLast4}
+      </span>
+      <span className="text-[11px] text-muted-2">
+        {receipt.reference} · {receipt.usd} · {receipt.date}
+      </span>
+      {receipt.clientName ? (
+        <span className="text-[11px] font-semibold text-accent">→ {receipt.clientName}</span>
+      ) : (
+        <span className="text-[11px] font-semibold text-warning">→ немапиран акаунт</span>
+      )}
+      {hasPdf && (
+        <a
+          href={receipt.attachmentUrl!}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-1 text-[11px] font-bold text-accent hover:underline"
+        >
+          <ExternalLink size={12} /> PDF
+        </a>
+      )}
+      <div className="ml-auto flex items-center gap-2">
+        <span className="text-[12px] font-bold text-ink">
+          {rate > 0 ? `${formatMKD(mkd, { decimals: 0 })} ден` : "внеси курс"}
+        </span>
+        <button
+          onClick={() => rate > 0 && run(() => bookOtherCardAction(receipt.id, rate))}
+          disabled={pending || rate <= 0}
+          className="rounded bg-accent px-2.5 py-1 text-[11px] font-bold text-white disabled:opacity-40"
+        >
+          Книжи
+        </button>
+        <button
+          onClick={() => run(() => deleteReceiptAction(receipt.id))}
+          disabled={pending}
+          className="rounded border border-danger-50 px-2 py-1 text-[11px] font-bold text-danger disabled:opacity-40"
+        >
+          <X size={13} />
         </button>
       </div>
     </div>

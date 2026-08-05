@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { formatMKD } from "@smetko/shared";
+import { currentPeriod, formatMKD, periodStart } from "@smetko/shared";
 import { approveInvoice, generateCharges } from "@/lib/workflows/w1";
 import { getDashboard } from "@/lib/dashboard";
 import { prisma, resetDb } from "./setup/db";
@@ -10,11 +10,20 @@ import { createInvoiceClient, fundBlagajna } from "./setup/factories";
  * bank statement, an approved+part-paid invoice, an unapproved draft, cash movements, and an
  * unresolved statement line, then asserts each KPI / panel / attention counter.
  */
-const PERIOD = "2026-07";
+// Use the live current period so the dashboard's "this month" aggregations line up with the seeded
+// data regardless of the wall-clock date the suite runs on.
+const PERIOD = currentPeriod();
+const inPeriod = periodStart(PERIOD); // a date inside PERIOD, for date-filtered rows (payments, cash)
 const d0 = (n: number) => formatMKD(n, { decimals: 0 });
 let userId = "";
 beforeEach(async () => {
   ({ userId } = await resetDb());
+  // resetDb seeds only the fixed TEST_PERIOD; ensure the live current period exists (OPEN) too.
+  await prisma.period.upsert({
+    where: { id: PERIOD },
+    create: { id: PERIOD, status: "OPEN" },
+    update: {},
+  });
 });
 
 describe("dashboard aggregator (SM-103)", () => {
@@ -34,7 +43,7 @@ describe("dashboard aggregator (SM-103)", () => {
         chargeId: chargeA.id,
         channel: "BANK",
         amount: 1_000_000,
-        date: new Date(Date.UTC(2026, 6, 15)),
+        date: inPeriod,
         matchStatus: "MANUAL_MATCHED",
       },
     });
@@ -49,7 +58,7 @@ describe("dashboard aggregator (SM-103)", () => {
       data: {
         bankAccountId: bank.id,
         statementNumber: 200,
-        statementDate: new Date(Date.UTC(2026, 6, 20)),
+        statementDate: inPeriod,
         source: "MANUAL_UPLOAD",
         fileRef: "t",
         openingBalance: 0,
@@ -64,7 +73,7 @@ describe("dashboard aggregator (SM-103)", () => {
       data: {
         importId: imp.id,
         lineHash: "dash-out-1",
-        date: new Date(Date.UTC(2026, 6, 20)),
+        date: inPeriod,
         amount: 12_300,
         direction: "OUT",
         description: "SKOPJE SOMETHING",
@@ -79,7 +88,7 @@ describe("dashboard aggregator (SM-103)", () => {
       data: {
         direction: "OUT",
         amount: 500_000,
-        date: new Date(Date.UTC(2026, 6, 18)),
+        date: inPeriod,
         description: "Кеш трошок",
         counterpartyType: "VENDOR",
         documentType: "KASA_ISPLATI",

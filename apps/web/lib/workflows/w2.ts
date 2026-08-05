@@ -454,26 +454,10 @@ export async function ingestParsedStatement(
         }
       }
 
-      // FIFO (Part 2B): an incoming line still unmatched → settle the payer's oldest open invoice
-      // by giro account, so it never piles up in Решавање.
-      if (line.direction === Direction.IN) {
-        const cur = await tx.statementLine.findUnique({
-          where: { id: sl.id },
-          select: { processed: true },
-        });
-        if (
-          !cur?.processed &&
-          (await settleOldestByAccount(
-            tx,
-            sl.id,
-            line.amount,
-            statementDate,
-            line.reference,
-            userId,
-          ))
-        )
-          clientMatched++;
-      }
+      // SM-119: FIFO-by-account NO LONGER auto-settles on import. Auto-settling the oldest open
+      // invoice by giro account (without amount/reference corroboration) mis-booked payments to the
+      // wrong invoice/client. An incoming line with no matched повикување now stays unprocessed and
+      // is settled only from ЗАДОЛЖУВАЊА with an explicit "Потврди раздолжување" confirmation.
     }
 
     await writeAudit(tx, {

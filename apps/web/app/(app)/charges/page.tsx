@@ -6,6 +6,7 @@ import {
   getCharges,
   getChargesByClient,
   getClientOptions,
+  getPaymentSuggestions,
   getUnmatchedPayments,
 } from "@/lib/charges";
 import { getCloseBlockers } from "@/lib/workflows/w8";
@@ -29,6 +30,7 @@ export default async function ChargesPage({
 
   const clientId = client && clients.some((c) => c.id === client) ? client : undefined;
   const charges = clientId ? await getChargesByClient(clientId, year) : await getCharges(period);
+  const suggestions = clientId ? {} : await getPaymentSuggestions(period);
 
   return (
     <ChargesView
@@ -41,6 +43,7 @@ export default async function ChargesPage({
       blockers={blockers}
       closed={periodRow?.status === "CLOSED"}
       unmatchedPayments={unmatchedPayments}
+      suggestions={suggestions}
     />
   );
 }

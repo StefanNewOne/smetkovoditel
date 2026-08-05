@@ -46,6 +46,7 @@ export function ChargesView({
   blockers,
   closed,
   unmatchedPayments,
+  suggestions,
 }: {
   period: string;
   year: string;
@@ -56,6 +57,7 @@ export function ChargesView({
   blockers: CloseBlocker[];
   closed: boolean;
   unmatchedPayments: PaymentOption[];
+  suggestions: Record<string, { lineId: string; label: string }>;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -104,6 +106,11 @@ export function ChargesView({
     onCollect: (c: ChargeRow) => setCashFor(c),
     onCreditNote: (c: ChargeRow) => setCnFor(c),
     onEdit: (c: ChargeRow) => setEditFor(c),
+    onConfirmSettle: (chargeId: string, lineId: string) =>
+      run(async () => {
+        const r = await matchInvoiceLineAction(chargeId, lineId);
+        setMsg(r.ok ? "Раздолжено." : r.error);
+      }),
   };
 
   return (
@@ -187,6 +194,7 @@ export function ChargesView({
         rows={invoices}
         actions={rowActions}
         clientMode={!!clientId}
+        suggestions={suggestions}
         onRunW1={() =>
           run(async () => {
             const r = await runW1(period, "INVOICE");
@@ -435,6 +443,7 @@ interface RowActions {
   onCollect: (c: ChargeRow) => void;
   onCreditNote: (c: ChargeRow) => void;
   onEdit: (c: ChargeRow) => void;
+  onConfirmSettle: (chargeId: string, lineId: string) => void;
 }
 
 function ChargeSection({
@@ -443,6 +452,7 @@ function ChargeSection({
   rows,
   actions,
   clientMode = false,
+  suggestions = {},
   onRunW1,
   onApproveAll,
 }: {
@@ -451,6 +461,7 @@ function ChargeSection({
   rows: ChargeRow[];
   actions: RowActions;
   clientMode?: boolean;
+  suggestions?: Record<string, { lineId: string; label: string }>;
   onRunW1: () => void;
   onApproveAll: () => void;
 }) {
@@ -568,6 +579,16 @@ function ChargeSection({
                 </>
               ) : isInvoice && c.kind === "INVOICE" ? (
                 <>
+                  {suggestions[c.id] && (
+                    <button
+                      onClick={() => actions.onConfirmSettle(c.id, suggestions[c.id]!.lineId)}
+                      disabled={actions.pending || actions.closed}
+                      title={`Предлог: ${suggestions[c.id]!.label}`}
+                      className="rounded-[7px] bg-success px-3 py-1.5 text-[12px] font-bold text-white hover:opacity-90 disabled:opacity-40"
+                    >
+                      Потврди раздолжување
+                    </button>
+                  )}
                   <button
                     onClick={() => actions.onPay(c)}
                     disabled={actions.pending || actions.closed}

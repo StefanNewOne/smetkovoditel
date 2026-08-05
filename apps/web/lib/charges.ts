@@ -1,6 +1,12 @@
 import "server-only";
 import { formatMKD } from "@smetko/shared";
-import { prisma } from "@smetko/db";
+import { ChargeStatus, prisma } from "@smetko/db";
+
+const OPEN_STATUSES: ChargeStatus[] = [
+  ChargeStatus.OPEN,
+  ChargeStatus.PARTIALLY_PAID,
+  ChargeStatus.OVERDUE,
+];
 
 export interface ChargeRow {
   id: string;
@@ -99,6 +105,47 @@ export async function getChargeForEdit(chargeId: string): Promise<ChargeEditData
     .filter((l) => l.type === "META_ADS" || l.type === "ACTORS")
     .map((l) => ({ description: l.description, amount: l.amount }));
   return { kind: charge.kind, editableLines, passthrough };
+}
+
+/** SM-119 — a suggested incoming line to settle an OPEN invoice, matched by the client's giro
+ *  account. Surfaced with a "Потврди раздолжување" button so nothing auto-books without confirmation. */
+export async function getPaymentSuggestions(
+  period: string,
+): Promise<Record<string, { lineId: string; label: string }>> {
+  const open = await prisma.charge.findMany({
+    where: { period, kind: "INVOICE", status: { in: OPEN_STATUSES } },
+    select: { id: true, clientId: true, total: true, paidAmount: true },
+  });
+  if (open.length === 0) return {};
+  const accounts = await prisma.clientBankAccount.findMany({
+    select: { account: true, clientId: true },
+  });
+  const clientByAccount = new Map(accounts.map((a) => [a.account, a.clientId]));
+  const lines = await prisma.statementLine.findMany({
+    where: { processed: false, direction: "IN", counterpartyAccount: { not: null } },
+    orderBy: { date: "asc" },
+    include: { import: { select: { statementNumber: true } } },
+  });
+  const dt = (d: Date) =>
+    new Date(d).toLocaleDateString("mk-MK", { day: "2-digit", month: "2-digit" });
+  const used = new Set<string>();
+  const out: Record<string, { lineId: string; label: string }> = {};
+  for (const ch of open) {
+    const remaining = ch.total - ch.paidAmount;
+    const cand = lines.filter(
+      (l) => !used.has(l.id) && clientByAccount.get(l.counterpartyAccount!) === ch.clientId,
+    );
+    const best = cand.find((l) => l.amount === remaining) ?? cand[0];
+    if (!best) continue;
+    used.add(best.id);
+    out[ch.id] = {
+      lineId: best.id,
+      label: `Извод ${best.import.statementNumber} · ${dt(best.date)} · +${formatMKD(best.amount, {
+        decimals: 0,
+      })}`,
+    };
+  }
+  return out;
 }
 
 export interface PaymentOption {

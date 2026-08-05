@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Lock, Play } from "lucide-react";
+import { ChevronLeft, ChevronRight, Lock, Play, X } from "lucide-react";
 import { formatMKD, parseDenari, shiftPeriod } from "@smetko/shared";
 import { StatusBadge } from "@/components/ui/badges";
 import type { ChargeRow, PaymentOption } from "@/lib/charges";
@@ -13,6 +13,8 @@ import {
   collectCashOnChargeAction,
   creditNote,
   deleteChargeAction,
+  editChargeAction,
+  loadChargeForEditAction,
   matchInvoiceLineAction,
   runW1,
 } from "./actions";
@@ -35,13 +37,21 @@ function safeDeni(raw: string): number {
 
 export function ChargesView({
   period,
+  year,
   charges,
+  clients,
+  clientId,
+  clientName,
   blockers,
   closed,
   unmatchedPayments,
 }: {
   period: string;
+  year: string;
   charges: ChargeRow[];
+  clients: { id: string; name: string }[];
+  clientId?: string;
+  clientName?: string;
   blockers: CloseBlocker[];
   closed: boolean;
   unmatchedPayments: PaymentOption[];
@@ -54,6 +64,7 @@ export function ChargesView({
   const [payFor, setPayFor] = useState<ChargeRow | null>(null);
   const [cashFor, setCashFor] = useState<ChargeRow | null>(null);
   const [delFor, setDelFor] = useState<ChargeRow | null>(null);
+  const [editFor, setEditFor] = useState<ChargeRow | null>(null);
 
   const deleteNow = (c: ChargeRow) =>
     run(async () => {
@@ -89,38 +100,67 @@ export function ChargesView({
     onPay: (c: ChargeRow) => setPayFor(c),
     onCollect: (c: ChargeRow) => setCashFor(c),
     onCreditNote: (c: ChargeRow) => setCnFor(c),
+    onEdit: (c: ChargeRow) => setEditFor(c),
   };
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1 rounded-md border border-border bg-surface">
-          <button
-            onClick={() => go(shiftPeriod(period, -1))}
-            className="px-2 py-1.5 text-muted hover:text-ink"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <span className="min-w-[84px] text-center text-[13px] font-bold text-ink">{period}</span>
-          <button
-            onClick={() => go(shiftPeriod(period, 1))}
-            className="px-2 py-1.5 text-muted hover:text-ink"
-          >
-            <ChevronRight size={16} />
-          </button>
-        </div>
-        {closed && (
+        {clientId ? (
+          <span className="rounded-md bg-accent-50 px-3 py-1.5 text-[13px] font-bold text-accent">
+            {clientName} · сите задолжувања {year}
+          </span>
+        ) : (
+          <div className="flex items-center gap-1 rounded-md border border-border bg-surface">
+            <button
+              onClick={() => go(shiftPeriod(period, -1))}
+              className="px-2 py-1.5 text-muted hover:text-ink"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span className="min-w-[84px] text-center text-[13px] font-bold text-ink">
+              {period}
+            </span>
+            <button
+              onClick={() => go(shiftPeriod(period, 1))}
+              className="px-2 py-1.5 text-muted hover:text-ink"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        )}
+
+        <select
+          value={clientId ?? ""}
+          onChange={(e) =>
+            router.push(
+              e.target.value ? `/charges?client=${e.target.value}` : `/charges?period=${period}`,
+            )
+          }
+          className="rounded-md border border-border bg-surface px-2.5 py-2 text-[12.5px] font-semibold text-ink"
+        >
+          <option value="">Сите клиенти (по месец)</option>
+          {clients.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+
+        {!clientId && closed && (
           <span className="flex items-center gap-1 rounded-md bg-ink px-3 py-1.5 text-[12px] font-bold text-white">
             <Lock size={12} /> Период ЗАТВОРЕН (B9)
           </span>
         )}
-        <button
-          onClick={() => setCloseOpen(true)}
-          disabled={closed}
-          className="ml-auto rounded-md border border-border px-3.5 py-2 text-[12px] font-bold text-muted hover:bg-inset disabled:opacity-40"
-        >
-          Затвори период
-        </button>
+        {!clientId && (
+          <button
+            onClick={() => setCloseOpen(true)}
+            disabled={closed}
+            className="ml-auto rounded-md border border-border px-3.5 py-2 text-[12px] font-bold text-muted hover:bg-inset disabled:opacity-40"
+          >
+            Затвори период
+          </button>
+        )}
       </div>
 
       {msg && (
@@ -134,6 +174,7 @@ export function ChargesView({
         channel="INVOICE"
         rows={invoices}
         actions={rowActions}
+        clientMode={!!clientId}
         onRunW1={() =>
           run(async () => {
             const r = await runW1(period, "INVOICE");
@@ -159,6 +200,7 @@ export function ChargesView({
         channel="CASH"
         rows={cash}
         actions={rowActions}
+        clientMode={!!clientId}
         onRunW1={() =>
           run(async () => {
             const r = await runW1(period, "CASH");
@@ -298,6 +340,19 @@ export function ChargesView({
           </div>
         </Modal>
       )}
+
+      {editFor && (
+        <EditChargeModal
+          charge={editFor}
+          pending={pending}
+          onClose={() => setEditFor(null)}
+          onSaved={(m) => {
+            setEditFor(null);
+            setMsg(m);
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -322,6 +377,7 @@ interface RowActions {
   onPay: (c: ChargeRow) => void;
   onCollect: (c: ChargeRow) => void;
   onCreditNote: (c: ChargeRow) => void;
+  onEdit: (c: ChargeRow) => void;
 }
 
 function ChargeSection({
@@ -329,6 +385,7 @@ function ChargeSection({
   channel,
   rows,
   actions,
+  clientMode = false,
   onRunW1,
   onApproveAll,
 }: {
@@ -336,6 +393,7 @@ function ChargeSection({
   channel: "INVOICE" | "CASH";
   rows: ChargeRow[];
   actions: RowActions;
+  clientMode?: boolean;
   onRunW1: () => void;
   onApproveAll: () => void;
 }) {
@@ -348,22 +406,24 @@ function ChargeSection({
         <span className="rounded-[10px] bg-chip px-2 py-0.5 text-[11px] font-bold text-muted">
           {rows.length}
         </span>
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={onRunW1}
-            disabled={actions.pending || actions.closed}
-            className="flex items-center gap-1.5 rounded-md border border-accent-200 px-3 py-1.5 text-[12px] font-bold text-accent hover:bg-accent-50 disabled:opacity-40"
-          >
-            <Play size={12} /> Изврши
-          </button>
-          <button
-            onClick={onApproveAll}
-            disabled={actions.pending || drafts === 0 || actions.closed}
-            className="rounded-md bg-accent px-3 py-1.5 text-[12px] font-bold text-white hover:opacity-90 disabled:opacity-40"
-          >
-            Одобри DRAFT ({drafts})
-          </button>
-        </div>
+        {!clientMode && (
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={onRunW1}
+              disabled={actions.pending || actions.closed}
+              className="flex items-center gap-1.5 rounded-md border border-accent-200 px-3 py-1.5 text-[12px] font-bold text-accent hover:bg-accent-50 disabled:opacity-40"
+            >
+              <Play size={12} /> Изврши
+            </button>
+            <button
+              onClick={onApproveAll}
+              disabled={actions.pending || drafts === 0 || actions.closed}
+              className="rounded-md bg-accent px-3 py-1.5 text-[12px] font-bold text-white hover:opacity-90 disabled:opacity-40"
+            >
+              Одобри DRAFT ({drafts})
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="overflow-x-auto">
@@ -371,7 +431,7 @@ function ChargeSection({
           className="hidden min-w-[720px] items-center border-b border-border-2 px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.5px] text-muted-2 md:grid"
           style={{ gridTemplateColumns: COLS }}
         >
-          <span>Клиент</span>
+          <span>{clientMode ? "Период" : "Клиент"}</span>
           <span>Број</span>
           <span className="text-right">Основица</span>
           <span className="text-right">Вкупно</span>
@@ -388,7 +448,7 @@ function ChargeSection({
             style={{ gridTemplateColumns: COLS }}
           >
             <span className="flex items-center justify-between gap-2 md:block">
-              <span className="font-bold text-ink">{c.clientName}</span>
+              <span className="font-bold text-ink">{clientMode ? c.period : c.clientName}</span>
               <span className="md:hidden">
                 <StatusBadge status={c.status} />
               </span>
@@ -422,6 +482,13 @@ function ChargeSection({
             <span className="flex items-center justify-start gap-2 md:justify-end">
               {c.status === "DRAFT" ? (
                 <>
+                  <button
+                    onClick={() => actions.onEdit(c)}
+                    disabled={actions.pending || actions.closed}
+                    className="rounded-[7px] border border-border px-3 py-1.5 text-[12px] font-bold text-muted hover:bg-inset disabled:opacity-40"
+                  >
+                    Едитирај
+                  </button>
                   <button
                     onClick={() => actions.onApprove(c)}
                     disabled={actions.pending || actions.closed}
@@ -589,6 +656,159 @@ function CashModal({
           Запиши наплата
         </button>
       </div>
+    </Modal>
+  );
+}
+
+function EditChargeModal({
+  charge,
+  pending,
+  onClose,
+  onSaved,
+}: {
+  charge: ChargeRow;
+  pending: boolean;
+  onClose: () => void;
+  onSaved: (msg: string) => void;
+}) {
+  const [lines, setLines] = useState<{ description: string; amountRaw: string }[]>([]);
+  const [passthrough, setPassthrough] = useState<{ description: string; amount: number }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+  const [saving, startSave] = useTransition();
+
+  useEffect(() => {
+    loadChargeForEditAction(charge.id).then((r) => {
+      if (r.ok) {
+        setLines(
+          r.data.editableLines.length > 0
+            ? r.data.editableLines.map((l) => ({
+                description: l.description,
+                amountRaw: String(l.amount / 100).replace(".", ","),
+              }))
+            : [{ description: "Услуга", amountRaw: "" }],
+        );
+        setPassthrough(r.data.passthrough);
+      } else setErr(r.error);
+      setLoading(false);
+    });
+  }, [charge.id]);
+
+  const isInvoice = charge.kind === "INVOICE";
+  const amounts = [...lines.map((l) => safeDeni(l.amountRaw)), ...passthrough.map((p) => p.amount)];
+  const subtotal = amounts.reduce((s, a) => s + a, 0);
+  const vat = isInvoice ? amounts.reduce((s, a) => s + Math.round(a * 0.18), 0) : 0;
+  const total = subtotal + vat;
+  const setLine = (i: number, patch: Partial<{ description: string; amountRaw: string }>) =>
+    setLines(lines.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+
+  const save = () =>
+    startSave(async () => {
+      setErr("");
+      const payload = lines
+        .map((l) => ({ description: l.description.trim(), amount: safeDeni(l.amountRaw) }))
+        .filter((l) => l.description);
+      if (payload.length === 0) {
+        setErr("Внеси барем една ставка.");
+        return;
+      }
+      const r = await editChargeAction(charge.id, payload);
+      if (r.ok) onSaved("Задолжувањето е ажурирано.");
+      else setErr(r.error);
+    });
+
+  return (
+    <Modal title={`Едитирај · ${charge.clientName}`} onClose={onClose}>
+      {loading ? (
+        <p className="text-[13px] text-muted-2">Вчитувам…</p>
+      ) : (
+        <>
+          <p className="mb-2 text-[11.5px] text-muted-2">
+            Промени ја цената или додади ставка. ДДВ и вкупното се пресметуваат автоматски.
+          </p>
+          <div className="flex flex-col gap-2">
+            {lines.map((l, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input
+                  value={l.description}
+                  onChange={(e) => setLine(i, { description: e.target.value })}
+                  placeholder={i === 0 ? "Услуга" : "Опис на ставка"}
+                  className="min-w-0 flex-1 rounded-md border border-input px-2.5 py-1.5 text-[12.5px]"
+                />
+                <input
+                  value={l.amountRaw}
+                  onChange={(e) => setLine(i, { amountRaw: e.target.value })}
+                  inputMode="decimal"
+                  placeholder="0,00"
+                  className="w-28 rounded-md border border-input px-2.5 py-1.5 text-right text-[12.5px]"
+                />
+                {lines.length > 1 && (
+                  <button
+                    onClick={() => setLines(lines.filter((_, j) => j !== i))}
+                    className="text-muted-2 hover:text-danger"
+                    title="Отстрани ставка"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            ))}
+            <button
+              onClick={() => setLines([...lines, { description: "", amountRaw: "" }])}
+              className="self-start text-[12px] font-semibold text-accent hover:underline"
+            >
+              + Додади ставка
+            </button>
+          </div>
+
+          {passthrough.length > 0 && (
+            <div className="mt-3 rounded-lg bg-inset px-3 py-2 text-[11.5px] text-muted-2">
+              <p className="mb-1 font-semibold">Автоматски ставки (не се едитираат):</p>
+              {passthrough.map((p, i) => (
+                <div key={i} className="flex justify-between">
+                  <span>{p.description}</span>
+                  <span>{formatMKD(p.amount, { decimals: 0 })} ден</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-4 flex flex-col gap-0.5 text-[12.5px]">
+            <div className="flex justify-between text-muted">
+              <span>Основица</span>
+              <span>{formatMKD(subtotal, { decimals: 0 })} ден</span>
+            </div>
+            {isInvoice && (
+              <div className="flex justify-between text-muted">
+                <span>ДДВ 18%</span>
+                <span>{formatMKD(vat, { decimals: 0 })} ден</span>
+              </div>
+            )}
+            <div className="flex justify-between text-[14px] font-extrabold text-ink">
+              <span>Вкупно</span>
+              <span>{formatMKD(total, { decimals: 0 })} ден</span>
+            </div>
+          </div>
+
+          {err && <p className="mt-2 text-[12px] text-danger">{err}</p>}
+
+          <div className="mt-5 flex justify-between">
+            <button
+              onClick={onClose}
+              className="rounded-md border border-border px-4 py-2 text-[12px] font-bold text-muted hover:bg-inset"
+            >
+              Откажи
+            </button>
+            <button
+              disabled={saving || pending}
+              onClick={save}
+              className="rounded-md bg-accent px-5 py-2 text-[13px] font-bold text-white hover:opacity-90 disabled:opacity-40"
+            >
+              {saving ? "Зачувувам…" : "Зачувај"}
+            </button>
+          </div>
+        </>
+      )}
     </Modal>
   );
 }

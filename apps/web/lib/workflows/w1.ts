@@ -72,7 +72,7 @@ export async function generateCharges(
       skipped++; // client has not started yet in this period
       continue;
     }
-    if (pkg.billingCycle === "QUARTERLY") {
+    if (client.billingCycle === "QUARTERLY") {
       const monthsSinceStart =
         (start.getUTCFullYear() - anchorMonth.getUTCFullYear()) * 12 +
         (start.getUTCMonth() - anchorMonth.getUTCMonth());
@@ -91,7 +91,7 @@ export async function generateCharges(
           type: LineType.SERVICE,
           description:
             pkg.description ??
-            (pkg.billingCycle === "QUARTERLY" ? "Тромесечен пакет" : "Месечен пакет"),
+            (client.billingCycle === "QUARTERLY" ? "Тромесечен пакет" : "Месечен пакет"),
           amount: pkg.monthlyAmount,
           vatRate,
         },
@@ -381,5 +381,55 @@ export async function deleteCharge(chargeId: string, userId: string) {
       userId,
     });
     await tx.charge.delete({ where: { id: chargeId } });
+  });
+}
+
+/**
+ * SM-116 — replace a DRAFT charge's editable lines (SERVICE + OTHER) before approval and recompute
+ * subtotal / VAT / total. Pass-through ADS/ACTORS lines are preserved (computed from expenses, not
+ * hand-edited). DRAFT-only and period-guarded (B9); an approved/numbered invoice is corrected via
+ * CREDIT_NOTE, never edited. VAT is recomputed from each line's rate (never a hand-entered total).
+ */
+export async function editChargeLines(
+  chargeId: string,
+  lines: { description: string; amount: number }[],
+  userId: string,
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const charge = await tx.charge.findUnique({ where: { id: chargeId } });
+    if (!charge) throw new Error("Задолжувањето не постои.");
+    if (charge.status !== ChargeStatus.DRAFT)
+      throw new Error("Само DRAFT (неодобрено) задолжување може да се едитира.");
+    await assertPeriodOpen(tx, charge.period); // B9
+
+    const vatRate = charge.kind === ChargeKind.INVOICE ? VAT_RATE : 0;
+
+    await tx.chargeLine.deleteMany({
+      where: { chargeId, type: { in: [LineType.SERVICE, LineType.OTHER] } },
+    });
+    await tx.chargeLine.createMany({
+      data: lines.map((l, i) => ({
+        chargeId,
+        type: i === 0 ? LineType.SERVICE : LineType.OTHER,
+        description: l.description,
+        amount: l.amount,
+        vatRate,
+      })),
+    });
+
+    const all = await tx.chargeLine.findMany({ where: { chargeId } });
+    const subtotal = all.reduce((s, l) => s + l.amount, 0);
+    const vatAmount = all.reduce((s, l) => s + Math.round(l.amount * l.vatRate), 0);
+    await tx.charge.update({
+      where: { id: chargeId },
+      data: { subtotal, vatAmount, total: subtotal + vatAmount },
+    });
+    await writeAudit(tx, {
+      entity: "Charge",
+      entityId: chargeId,
+      action: "edit",
+      diff: { editableLines: lines.length, subtotal, vatAmount, total: subtotal + vatAmount },
+      userId,
+    });
   });
 }

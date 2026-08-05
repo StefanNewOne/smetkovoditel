@@ -149,6 +149,7 @@ model Client {
   contactEmail    String?
   contactPhone    String?
   paymentChannel  PaymentChannel
+  billingCycle    BillingCycle            @default(MONTHLY) // месечен / тромесечен наплата (SM-118) — по клиент, изменливо
   vatApplicable   Boolean                 @default(true)
   paymentTermDays Int                     @default(15)
   status          ClientStatus            @default(ACTIVE)

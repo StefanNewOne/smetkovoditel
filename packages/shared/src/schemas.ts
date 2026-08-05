@@ -140,6 +140,21 @@ export const zUpdateClientDetails = z.object({
 });
 export type UpdateClientDetailsInput = z.infer<typeof zUpdateClientDetails>;
 
+/** SM-116 — edit a DRAFT charge's lines (price/extra items) before approval. First line = SERVICE,
+ *  the rest = OTHER; pass-through (ADS/ACTORS) lines are preserved server-side. VAT is recomputed. */
+export const zEditCharge = z.object({
+  chargeId: z.string().min(1),
+  lines: z
+    .array(
+      z.object({
+        description: z.string().trim().min(1, "Внеси опис"),
+        amount: z.number().int().min(0), // дени
+      }),
+    )
+    .min(1, "Барем една ставка"),
+});
+export type EditChargeInput = z.infer<typeof zEditCharge>;
+
 /** SM-113 — issuer identity + invoice settings (Company profile, Подесувања). */
 export const zCompanyProfile = z.object({
   name: z.string().trim().min(1, "Внеси назив"),

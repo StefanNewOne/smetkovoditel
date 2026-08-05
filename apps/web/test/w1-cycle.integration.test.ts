@@ -11,16 +11,16 @@ beforeEach(async () => {
 
 async function quarterlyClient(startDate: Date, amount: number) {
   const c = await prisma.client.create({
-    data: { name: "Кварт", paymentChannel: "INVOICE", vatApplicable: true, startDate },
+    data: {
+      name: "Кварт",
+      paymentChannel: "INVOICE",
+      vatApplicable: true,
+      startDate,
+      billingCycle: "QUARTERLY", // SM-118: cycle is a client-level attribute, read by W1
+    },
   });
   await prisma.servicePackage.create({
-    data: {
-      clientId: c.id,
-      monthlyAmount: amount,
-      billingCycle: "QUARTERLY",
-      effectiveFrom: startDate,
-      createdById: userId,
-    },
+    data: { clientId: c.id, monthlyAmount: amount, effectiveFrom: startDate, createdById: userId },
   });
   return c;
 }

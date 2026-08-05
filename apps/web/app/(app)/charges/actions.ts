@@ -2,14 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { ChargeKind, ChargeStatus, prisma } from "@smetko/db";
-import { currentPeriod, isValidPeriod } from "@smetko/shared";
+import { currentPeriod, isValidPeriod, zEditCharge } from "@smetko/shared";
 import { requireWriter } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
 import { assertPeriodOpen } from "@/lib/period-guard";
+import { type ChargeEditData, getChargeForEdit } from "@/lib/charges";
 import {
   approveCashObligation,
   approveInvoice,
   deleteCharge,
+  editChargeLines,
   generateCharges,
 } from "@/lib/workflows/w1";
 import { collectCash } from "@/lib/workflows/w3";
@@ -56,6 +58,36 @@ export async function approveCharge(chargeId: string): Promise<ApproveResult> {
     return { ok: true, invoiceNumber: "" };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Одобрувањето не успеа." };
+  }
+}
+
+/** SM-116 — load a DRAFT charge's lines for the edit form. */
+export async function loadChargeForEditAction(
+  chargeId: string,
+): Promise<{ ok: true; data: ChargeEditData } | { ok: false; error: string }> {
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  const data = await getChargeForEdit(chargeId);
+  if (!data) return { ok: false, error: "Задолжувањето не постои." };
+  return { ok: true, data };
+}
+
+/** SM-116 — save edited lines of a DRAFT charge (price / extra items); VAT recomputed server-side. */
+export async function editChargeAction(
+  chargeId: string,
+  lines: { description: string; amount: number }[],
+): Promise<SimpleResult> {
+  const auth = await requireWriter();
+  if (!auth.ok) return auth;
+  const parsed = zEditCharge.safeParse({ chargeId, lines });
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Невалидни податоци." };
+  try {
+    await editChargeLines(parsed.data.chargeId, parsed.data.lines, auth.user.id);
+    revalidatePath("/charges");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Едитот не успеа." };
   }
 }
 

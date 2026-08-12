@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "test": "npm run test:integration",
     "test:integration": "vitest run --config vitest.config.integration.ts",
     "test:e2e": "playwright test"
   },

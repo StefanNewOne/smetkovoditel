@@ -16,6 +16,9 @@ Compose up -d --build
 Write-Step "Применувам миграции..."
 Invoke-Migrate
 
+Write-Step "Проверувам дозволи на документите..."
+Prepare-Uploads
+
 Write-Step "Чекам здравје..."
 if (Wait-Health) { Write-Ok "Ажурирано и подигнато: $AppUrl" }
 else { Write-Warn2 "Не одговара по ажурирање. Логови: Install\logs.ps1 web"; exit 1 }

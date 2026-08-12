@@ -96,6 +96,37 @@ function Invoke-PgDump([string]$TargetPath) {
   & docker exec $cid rm -f $tmp | Out-Null
 }
 
+# Prepare the attachment store (STORAGE_DIR=/app/uploads, the web_uploads volume). Two problems
+# this fixes on first install (SM-120):
+#   1. In dev, files live on the HOST at apps/web/uploads; the container mounts an EMPTY named
+#      volume, so every existing document (Meta PDFs, expense photos — legal documents) would 404.
+#   2. Docker creates the fresh volume dir owned by root, but the web server runs as non-root
+#      `app`, so it cannot WRITE new attachments (EACCES) until ownership is handed over.
+# Idempotent: `cp -n` never clobbers files the app created after install; safe to re-run.
+function Prepare-Uploads {
+  Push-Location $RepoRoot
+  try {
+    $cid = (& docker compose -p $Project -f $ComposeRel ps -q web).Trim()
+    if (-not $cid) { Write-Warn2 "web контејнерот не работи — прескокнувам подготовка на документи."; return }
+
+    $src = Join-Path $RepoRoot "apps\web\uploads"
+    $count = if (Test-Path $src) { (Get-ChildItem -File $src -ErrorAction SilentlyContinue | Measure-Object).Count } else { 0 }
+    if ($count -gt 0) {
+      Write-Step "Пренесувам $count постоечки документи во волуменот (еднаш, идемпотентно)..."
+      & docker exec -u 0 $cid sh -c "rm -rf /tmp/seed-uploads && mkdir -p /tmp/seed-uploads"
+      & docker cp "apps/web/uploads/." "${cid}:/tmp/seed-uploads"
+      if ($LASTEXITCODE -ne 0) { throw "docker cp (uploads) failed (exit $LASTEXITCODE)" }
+      & docker exec -u 0 $cid sh -c "mkdir -p /app/uploads && cp -rn /tmp/seed-uploads/. /app/uploads/ && rm -rf /tmp/seed-uploads"
+      if ($LASTEXITCODE -ne 0) { throw "seeding uploads into the volume failed (exit $LASTEXITCODE)" }
+      Write-Ok "Документите се пренесени и достапни во апликацијата."
+    }
+    # Always hand the store to the app user — needed even on a fresh (empty) install so new
+    # uploads (cash-expense photos B5, expense docs) can be written.
+    & docker exec -u 0 $cid sh -c "mkdir -p /app/uploads && chown -R app:app /app/uploads && chmod -R u+rwX /app/uploads"
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 "Не можев да ги наместам дозволите на /app/uploads (нови прикачувања може да не успеат)." }
+  } finally { Pop-Location }
+}
+
 # Run pending Prisma migrations from the host against the published DB port.
 function Invoke-Migrate {
   Push-Location $RepoRoot

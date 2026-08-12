@@ -1,5 +1,6 @@
 # SM-120 — Local install stack. Runs the FULL system locally as a real (built) server, not dev.
-#   web + worker + db + minio + mailhog, behind NO nginx/TLS (plain HTTP on localhost:3000).
+#   web + worker + db + mailhog, behind NO nginx/TLS (plain HTTP on localhost:3000).
+#   (No MinIO — attachments use local disk; see the note by the mailhog service.)
 #
 # Bring up via Install/install.ps1 / start.ps1 — do NOT run this alongside the dev
 # docker-compose.yml (both would mount the same db volume = corruption). The scripts stop the
@@ -26,18 +27,11 @@ services:
       timeout: 5s
       retries: 10
 
-  minio:
-    image: minio/minio
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    volumes:
-      - minio_data:/data
-    # No host port publishing on purpose — avoids the 9000/9001 clash with sibling projects.
-    # The app reaches MinIO over the compose network (minio:9000) and proxies attachments via
-    # /api/attachments. To reach the MinIO console from the host, add:  ports: ["9010:9001"]
+  # NOTE: no MinIO service. Attachments are stored on local disk (STORAGE_DIR=/app/uploads,
+  # the web_uploads volume) — see apps/web/lib/storage.ts. The S3/MinIO path is reserved for a
+  # future adapter (A6) but is NOT used in v1, so running MinIO here was dead weight and its
+  # `external` data volume was a needless first-install failure point. Re-add it only when the
+  # storage layer actually speaks S3.
 
   mailhog:
     image: mailhog/mailhog
@@ -84,8 +78,7 @@ volumes:
   db_data:
     external: true
     name: smetkovoditel_db_data
-  minio_data:
-    external: true
-    name: smetkovoditel_minio_data
+  # Attachment store (STORAGE_DIR). Seeded from apps/web/uploads on first install by
+  # Prepare-Uploads in _common.ps1; created automatically if absent.
   web_uploads:
     name: smetkovoditel_web_uploads

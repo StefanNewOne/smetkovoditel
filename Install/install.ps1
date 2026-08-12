@@ -11,10 +11,15 @@ Write-Step "Го симнувам dev стекот (за да нема две б
 Stop-DevStack
 
 # The existing data volume must be present — that's what makes this "the same database".
+# It is declared `external` in the compose file, so `docker compose up` FAILS if it is missing
+# (it does NOT silently create an empty one). Handle a genuinely fresh machine explicitly.
 $vol = docker volume ls --format '{{.Name}}' | Select-String -SimpleMatch "smetkovoditel_db_data"
 if (-not $vol) {
-  Write-Warn2 "Не постои volume 'smetkovoditel_db_data' — ќе се создаде ПРАЗНА база."
+  Write-Warn2 "Не постои volume 'smetkovoditel_db_data' — ќе започнеш со ПРАЗНА база."
   Write-Warn2 "Ако очекуваш постоечки податоци, прекини (Ctrl+C) и провери со: docker volume ls"
+  # Create the empty external volume so the first-ever install works; Prisma migrations below
+  # then build the schema. (The volume name is fixed in compose, so there's no typo risk here.)
+  & docker volume create smetkovoditel_db_data | Out-Null
 }
 
 # First-run config: create .env.install from the example and generate real secrets.
@@ -40,6 +45,9 @@ Compose up -d --build
 Write-Step "Применувам миграции на базата..."
 Invoke-Migrate
 
+Write-Step "Подготвувам документи (пренос на постоечки + дозволи за запис)..."
+Prepare-Uploads
+
 Write-Step "Градам native апликација (прозорец со твоја икона)..."
 try {
   & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "app\native\build-native.ps1")
@@ -49,7 +57,8 @@ Write-Step "Создавам десктоп и Start Menu икони..."
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "app\install-shortcuts.ps1")
 
 Write-Step "Чекам апликацијата да стане здрава..."
-if (Wait-Health) {
+# Generous window: the first cold boot (Next standalone + DB connect) can exceed the 90s default.
+if (Wait-Health 60) {
   Write-Ok "Системот е подигнат: $AppUrl"
   Start-Process $AppUrl
 } else {

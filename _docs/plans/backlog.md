@@ -202,3 +202,12 @@ counter gap (owner-accepted, UI double-confirms — left unchanged). Deferred ha
 `onDelete: SetNull → RESTRICT` on provenance links, DB-level `AuditLog` append-only grant,
 issue-date timezone pin to `Europe/Skopje`, move cron secret from query → header. Integration tests
 in `audit-fixes.integration.test.ts` (run with Docker up).
+
+## Local install — 2026-08-12 (developer request)
+
+Owner will run the full system locally for ~1 month before hosting go-live, then migrate the local
+DB to the server. Self-contained `Install/` package; existing project untouched.
+
+| ID     | Type        | Title                                                                                                                                                                                       | Ref       | Status |
+| ------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------ |
+| SM-120 | Maintenance | One-click local install (`Install/` package): built web+worker+db+minio via Docker, reuses existing DB volume, safe (no email/Gmail), export-db for go-live — see `SM-120-local-install.md` | §11, §4.1 | ☐      |

@@ -9,6 +9,10 @@ node_modules/
 .env.staging
 .env.production
 !.env.example
+Install/.env.install
+Install/exports/
+Install/backups/
+Install/installer/dist/
 
 # Build output
 .next/

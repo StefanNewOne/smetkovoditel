@@ -1,0 +1,91 @@
+# SM-120 — Local install stack. Runs the FULL system locally as a real (built) server, not dev.
+#   web + worker + db + minio + mailhog, behind NO nginx/TLS (plain HTTP on localhost:3000).
+#
+# Bring up via Install/install.ps1 / start.ps1 — do NOT run this alongside the dev
+# docker-compose.yml (both would mount the same db volume = corruption). The scripts stop the
+# dev stack first. Always launch with project name `smetkovoditel` so the existing named
+# volumes are reused (the scripts pass `-p smetkovoditel`).
+#
+# Build context is the repo root (`..`) because the Dockerfiles COPY the whole monorepo.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: smetko
+      POSTGRES_PASSWORD: smetko
+      POSTGRES_DB: smetko
+    ports:
+      # Keep 5434 published so host tooling (npm run db:studio, psql) still works.
+      - "5434:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smetko"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    # No host port publishing on purpose — avoids the 9000/9001 clash with sibling projects.
+    # The app reaches MinIO over the compose network (minio:9000) and proxies attachments via
+    # /api/attachments. To reach the MinIO console from the host, add:  ports: ["9010:9001"]
+
+  mailhog:
+    image: mailhog/mailhog
+    restart: unless-stopped
+    # Kept for a future email-preview SMTP adapter. Outbound email is OFF in v1 (no GMAIL_*),
+    # so nothing is sent here yet. Web UI (if a port is published): 8025.
+    ports:
+      - "8025:8025"
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    env_file: .env.install
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    volumes:
+      # Local attachment fallback (STORAGE_DIR) persisted across restarts.
+      - web_uploads:/app/uploads
+    healthcheck:
+      # 127.0.0.1 (not localhost): localhost also resolves to ::1, but the server listens on
+      # IPv4 0.0.0.0 only, so an IPv6 probe gets "connection refused". SM-120.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    build:
+      context: ..
+      dockerfile: apps/worker/Dockerfile
+    restart: unless-stopped
+    env_file: .env.install
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  # Reuse the EXISTING data — this is what makes the local system "the same database".
+  db_data:
+    external: true
+    name: smetkovoditel_db_data
+  minio_data:
+    external: true
+    name: smetkovoditel_minio_data
+  web_uploads:
+    name: smetkovoditel_web_uploads

@@ -203,6 +203,21 @@ v1.
 - `Stop-DevStack` не се вика во дневните операции (launch/start/update) — истото project име би го
   соборило install стекот; се вика само во `install.ps1` (прв пат).
 
+## 6b. Native апликација (Опција B — developer request, 2026-08-12)
+
+Edge `--app` (дури и инсталиран како PWA) на developer-овата машина продолжи да ја покажува Edge
+иконата во taskbar. По барање, додадена е **вистинска native апликација**:
+
+- `Install/app/native/SmetkoApp.cs` — WinForms + **WebView2** прозорец на `http://localhost:3000`,
+  наслов „Сметководител", икона поставена програмски + `/win32icon` (гарантирано наша икона, нула
+  Edge chrome). WebView2 состојба во `%LOCALAPPDATA%\Smetkovoditel\webview2`.
+- `build-native.ps1` — компајлира со **.NET Framework `csc.exe`** (без dotnet SDK); WebView2 SDK
+  DLL-овите (Core/WinForms/Loader, net462) се committed; `SmetkoApp.exe` + копијата на иконата се
+  gitignored (build артефакти). Користи го **WebView2 Runtime** што е пред-инсталиран на Win11.
+- `launch-app.ps1` прво ја бара native `SmetkoApp.exe`; ако недостасува → Edge резерва. `install.ps1`
+  ја гради при инсталација. Верификувано: десктоп иконата отвора native прозорец (0 Edge процеси; 6
+  `msedgewebview2` render процеси од нашиот UDF).
+
 ## 7. Опсег / вон опсег
 
 **Во опсег (v1):** `Install/` пакетот, реупотреба на постоечка база, безбеден режим (без пошта,

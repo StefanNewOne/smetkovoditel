@@ -34,7 +34,15 @@ try {
   $splash.Close(); $splash.Dispose()
 }
 
-# Prefer a chromeless app window (Edge, then Chrome). Fall back to the default browser.
+# Preferred: the native WebView2 shell (real app window, our icon, no Edge). Built by
+# native\build-native.ps1 (done during install).
+$native = Join-Path $PSScriptRoot "native\SmetkoApp.exe"
+if (Test-Path $native) {
+  Start-Process $native
+  return
+}
+
+# Fallback (if the native shell was not built): a chromeless Edge/Chrome app window.
 $browsers = @(
   "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
   "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe",

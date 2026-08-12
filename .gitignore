@@ -14,6 +14,8 @@ Install/exports/
 Install/backups/
 Install/installer/dist/
 Install/app/.pwa-appid.txt
+Install/app/native/SmetkoApp.exe
+Install/app/native/smetkovoditel.ico
 
 # Build output
 .next/

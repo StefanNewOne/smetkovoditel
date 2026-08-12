@@ -40,6 +40,11 @@ Compose up -d --build
 Write-Step "Применувам миграции на базата..."
 Invoke-Migrate
 
+Write-Step "Градам native апликација (прозорец со твоја икона)..."
+try {
+  & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "app\native\build-native.ps1")
+} catch { Write-Warn2 "Native градењето не успеа — ќе се користи Edge прозорец како резерва." }
+
 Write-Step "Создавам десктоп и Start Menu икони..."
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "app\install-shortcuts.ps1")
 

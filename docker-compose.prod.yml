@@ -29,7 +29,9 @@ services:
     expose:
       - "3000"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      # 127.0.0.1 (not localhost): the standalone server listens on IPv4 only, and localhost can
+      # resolve to ::1 → "connection refused". SM-120.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
       interval: 30s
       timeout: 5s
       retries: 5

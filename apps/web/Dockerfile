@@ -21,6 +21,10 @@ FROM node:22-alpine AS run
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
+# Bind the Next standalone server to all interfaces. Without this it binds to the container
+# hostname/IP only, so an in-container healthcheck on localhost:3000 gets "connection refused"
+# (breaks docker healthcheck + deploy.sh health gate). SM-120.
+ENV HOSTNAME=0.0.0.0
 # Run as a non-root user.
 RUN addgroup -S app && adduser -S app -G app
 COPY --from=build /repo/apps/web/.next/standalone ./

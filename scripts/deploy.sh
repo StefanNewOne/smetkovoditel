@@ -21,7 +21,8 @@ esac
 
 ENV_FILE=".env.${TIER}"
 COMPOSE="docker-compose.prod.yml"
-HEALTH_URL="http://localhost:3000/api/health"
+# 127.0.0.1 (not localhost): standalone server is IPv4-only; localhost can resolve to ::1. SM-120.
+HEALTH_URL="http://127.0.0.1:3000/api/health"
 
 echo "==> Deploy target: $TIER ($REF)"
 

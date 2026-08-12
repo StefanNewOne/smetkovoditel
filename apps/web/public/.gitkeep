@@ -1,0 +1,2 @@
+# Keeps apps/web/public/ present so the Docker build's `COPY .../public` step succeeds
+# (Next.js static assets dir). SM-120.

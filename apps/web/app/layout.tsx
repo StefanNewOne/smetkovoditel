@@ -9,11 +9,17 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "GoDigital Finance OS",
+  title: "Сметководител",
   description: "Сметководител — интерен финансиски систем на АЛМА ДИЗАЈН ДООЕЛ Скопје",
+  applicationName: "Сметководител",
+  appleWebApp: { capable: true, title: "Сметководител", statusBarStyle: "default" },
 };
 
-export const viewport: Viewport = { width: "device-width", initialScale: 1 };
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#3b76d1",
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

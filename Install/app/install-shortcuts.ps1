@@ -1,5 +1,9 @@
 ﻿# SM-120 — Create Desktop + Start Menu shortcuts so the system opens like an app (no terminal).
 # Run once after install.ps1:  powershell -ExecutionPolicy Bypass -File Install\app\install-shortcuts.ps1
+#
+# Uses the Unicode Shell API (IShellLinkW + IPersistFile) directly. WScript.Shell writes .lnk
+# paths AND fields (Description, IconLocation) via the ANSI codepage, so Cyrillic turns into "?".
+# IShellLinkW is Unicode end-to-end — correct names, tooltips and icons.
 $ErrorActionPreference = "Stop"
 
 $appDir  = $PSScriptRoot
@@ -11,25 +15,64 @@ if (-not (Test-Path $ico)) {
   & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $appDir "make-icon.ps1")
 }
 
-$wsh = New-Object -ComObject WScript.Shell
-$tmpSeq = 0
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
 
-# WScript.Shell saves the .lnk PATH via the ANSI codepage, so a Cyrillic filename becomes "?".
-# Work around it: save to an ASCII temp path, then rename to the real (Cyrillic) name with .NET
-# (Unicode-safe). The .lnk does not store its own filename, so the rename is harmless.
+[ComImport, Guid("00021401-0000-0000-C000-000000000046")]
+internal class CShellLink { }
+
+[ComImport, Guid("000214F9-0000-0000-C000-000000000046"),
+ InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IShellLinkW {
+    void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder f, int cch, IntPtr fd, uint flags);
+    void GetIDList(out IntPtr ppidl);
+    void SetIDList(IntPtr pidl);
+    void GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder s, int cch);
+    void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string s);
+    void GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder s, int cch);
+    void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string s);
+    void GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder s, int cch);
+    void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string s);
+    void GetHotkey(out short w);
+    void SetHotkey(short w);
+    void GetShowCmd(out int i);
+    void SetShowCmd(int i);
+    void GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder s, int cch, out int i);
+    void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string s, int i);
+    void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string s, uint dw);
+    void Resolve(IntPtr hwnd, uint flags);
+    void SetPath([MarshalAs(UnmanagedType.LPWStr)] string s);
+}
+
+[ComImport, Guid("0000010b-0000-0000-C000-000000000046"),
+ InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IPersistFile {
+    void GetClassID(out Guid pClassID);
+    [PreserveSig] int IsDirty();
+    void Load([MarshalAs(UnmanagedType.LPWStr)] string f, uint mode);
+    void Save([MarshalAs(UnmanagedType.LPWStr)] string f, [MarshalAs(UnmanagedType.Bool)] bool remember);
+    void SaveCompleted([MarshalAs(UnmanagedType.LPWStr)] string f);
+    void GetCurFile([MarshalAs(UnmanagedType.LPWStr)] out string f);
+}
+
+public static class Shortcut {
+    public static void Create(string path, string target, string args, string workDir, string icon, string desc) {
+        IShellLinkW link = (IShellLinkW)new CShellLink();
+        link.SetPath(target);
+        link.SetArguments(args);
+        link.SetWorkingDirectory(workDir);
+        link.SetIconLocation(icon, 0);
+        link.SetDescription(desc);
+        ((IPersistFile)link).Save(path, true);
+    }
+}
+"@
+
 function New-Shortcut($linkPath, $vbs, $desc) {
-  $script:tmpSeq++
-  # Temp must live in an ASCII path — COM Save() can't write into a Cyrillic folder either.
-  $tmp = Join-Path $env:TEMP ("_smetko_tmp_$tmpSeq.lnk")
-  $sc = $wsh.CreateShortcut($tmp)
-  $sc.TargetPath = $wscript
-  $sc.Arguments = '"' + (Join-Path $appDir $vbs) + '"'
-  $sc.WorkingDirectory = $appDir
-  $sc.IconLocation = "$ico,0"
-  $sc.Description = $desc
-  $sc.Save()
   if (Test-Path -LiteralPath $linkPath) { [System.IO.File]::Delete($linkPath) }
-  [System.IO.File]::Move($tmp, $linkPath)
+  [Shortcut]::Create($linkPath, $wscript, '"' + (Join-Path $appDir $vbs) + '"', $appDir, $ico, $desc)
 }
 
 # Desktop — main icon.

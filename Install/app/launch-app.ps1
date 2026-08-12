@@ -45,15 +45,24 @@ $exe = $browsers | Where-Object { Test-Path $_ } | Select-Object -First 1
 
 if ($exe) {
   # Dedicated profile so the app always opens its own window (even if the user's browser is
-  # already running), with its own taskbar identity, isolated from normal browsing.
+  # already running), isolated from normal browsing.
   $profileDir = Join-Path $env:LOCALAPPDATA "Smetkovoditel\browser-profile"
   New-Item -ItemType Directory -Force -Path $profileDir | Out-Null
-  Start-Process $exe -ArgumentList @(
-    "--app=$AppUrl",
-    "--user-data-dir=$profileDir",
-    "--no-first-run",
-    "--window-size=1400,900"
-  )
+
+  # If the system was installed as an app (install-pwa.ps1 recorded its id), open the INSTALLED
+  # app via --app-id so the taskbar/alt-tab show OUR icon. Otherwise fall back to a --app window.
+  $appIdFile = Join-Path $PSScriptRoot ".pwa-appid.txt"
+  $appId = if (Test-Path $appIdFile) { (Get-Content $appIdFile -Raw).Trim() } else { $null }
+  if ($appId) {
+    Start-Process $exe -ArgumentList "--app-id=$appId", "--user-data-dir=$profileDir"
+  } else {
+    Start-Process $exe -ArgumentList @(
+      "--app=$AppUrl",
+      "--user-data-dir=$profileDir",
+      "--no-first-run",
+      "--window-size=1400,900"
+    )
+  }
 } else {
   Start-Process $AppUrl   # default browser (also covers the "not ready yet" case)
 }

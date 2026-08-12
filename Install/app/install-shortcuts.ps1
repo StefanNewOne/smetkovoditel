@@ -84,6 +84,7 @@ $startDir = Join-Path ([Environment]::GetFolderPath("Programs")) "Сметков
 New-Item -ItemType Directory -Force -Path $startDir | Out-Null
 New-Shortcut (Join-Path $startDir "Сметководител.lnk")        "launch-app.vbs" "Отвори го Сметководител"
 New-Shortcut (Join-Path $startDir "Изгаси Сметководител.lnk") "stop-app.vbs"   "Изгаси го Сметководител"
+New-Shortcut (Join-Path $startDir "Инсталирај како апликација.lnk") "install-pwa.vbs" "Инсталирај го системот како апликација (своја икона во taskbar)"
 
 Write-Host "OK  Кратенки создадени: десктоп + Start Menu." -ForegroundColor Green
 Write-Host "    Двоен клик на 'Сметководител' на десктоп го отвора системот." -ForegroundColor Green

@@ -13,6 +13,7 @@ Install/.env.install
 Install/exports/
 Install/backups/
 Install/installer/dist/
+Install/app/.pwa-appid.txt
 
 # Build output
 .next/
